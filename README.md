@@ -24,7 +24,7 @@ city and view comprehensive travel information in one place.
 | Reviews / Details | Hotel-level review data |
 
 ## Database Schema
-**City**(`CountryName`, `CityName`, `RegionId`, Population, Latitude, Longitude)
+**City**(`CountryName`, `CityName`, RegionId, Population, Latitude, Longitude)
 
 **Hotel**(`CountryName`, `CityName`, `HotelName`, HotelRating, Address, Attractions, Description)
 
