@@ -26,7 +26,7 @@ city and view comprehensive travel information in one place.
 ## Database Schema
 **population**(`country`, `city`, population, latitude, longitude)
 
-**offerings**(hotel_class, url, type, id, name, `state`, `street_address`, postal_code, `city`)
+**offerings**(hotel_class, url, type, id, name, `state`, `street_address`, `postal_code`, `city`)
 
 **city_crime_index**(rank, `city`, `country`, crime_index, safety_index)
 
