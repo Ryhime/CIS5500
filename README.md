@@ -24,15 +24,14 @@ city and view comprehensive travel information in one place.
 | Reviews / Details | Hotel-level review data |
 
 ## Database Schema
-**City**(`CountryName`, `CityName`, RegionId, Population, Latitude, Longitude)
+**population**(`country`, `city`, population, latitude, longitude)
 
-**Hotel**(`CountryName`, `CityName`, `HotelName`, HotelRating, Address, Attractions, Description)
+**offerings**(hotel_class, url, type, id, name, `state`, `street_address`, postal_code, `city`)
 
-**CrimeIndex**(`CityName`, Rank, CrimeIndex, SafetyIndex)
+**city_crime_index**(rank, `city`, `country`, crime_index, safety_index)
 
-**HotelReview**(ServiceRating, CleanlinessRating, OverallRating, ValueRating, 
-LocationRating, SleepQualityRating, RatingTitle, Text, AuthorUsername, 
-DateStayed, HelpfulVotes, `HotelName`)
+**reviews**(title, text, author, date_stayed, offering_id, num_helpful_votes, date, `id`, service_rating, cleanliness_rating, overall_rating,
+value_rating, location_rating, sleep_quality_rating, rooms_rating)
 
 ## Data Sources
 - World Cities Population Dataset
