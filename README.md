@@ -58,6 +58,9 @@ All raw data is cleaned using Python (Pandas) before loading into PostgreSQL:
 | Weather API | Open-Meteo |
 | Tools | GitHub, pgAdmin / DataGrip |
 
+## Directories
+DataClean contains the code to clean 4 CSV files. A directory named "RawData" and a directory named "CleanedData" must be created and nested inside of DataClean prior to cleaning. The directory RawData also must be populate with the raw CSV files prior to running the cleaning code.
+
 ## Todo
 - Add Foreign Keys and Primary Keys to the database schema
 - Ensure all cities can be joined in the database
