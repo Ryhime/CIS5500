@@ -1,3 +1,5 @@
 DataClean/CleanedData/
 DataClean/RawData/
 node_modules
+.env
+.env.*

@@ -1,18 +1,28 @@
+require('dotenv').config();
+
 const express = require('express');
 const { Pool } = require('pg');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
 app.use(express.json());
 
+function requireEnv(name) {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
+}
+
 const pool = new Pool({
-  host: 'database-1.crwkw2g8ywa2.us-east-2.rds.amazonaws.com',
-  port: 5432,
-  user: 'postgres',
-  password: 'cis5550databaseworldtravel',
-  database: 'postgres',
-  ssl: { rejectUnauthorized: false },
+  host: requireEnv('PGHOST'),
+  port: process.env.PGPORT ? Number(process.env.PGPORT) : 5432,
+  user: requireEnv('PGUSER'),
+  password: requireEnv('PGPASSWORD'),
+  database: requireEnv('PGDATABASE'),
+  ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false },
 });
 
 app.get('/cities', async (req, res) => {
@@ -31,26 +41,29 @@ app.get('/cities', async (req, res) => {
 app.get('/cities/:cityName', async (req, res) => {
   try {
     const cityName = decodeURIComponent(req.params.cityName);
-    const result = await pool.query(`
-    SELECT
-        p.city,
-        p.country,
-        SUM(p.population) AS population,
-        p.latitude,
-        p.longitude,
-        ci.safety_index,
-        ci.crime_index
-    FROM population p
-    JOIN city_crime_index ci ON LOWER(p.city) = LOWER(ci.city)
-    WHERE LOWER(p.city) = LOWER('${cityName}')
-    GROUP BY
-        p.city,
-        p.country,
-        p.latitude,
-        p.longitude,
-        ci.safety_index,
-        ci.crime_index;
-      `);
+    const result = await pool.query(
+      `
+        SELECT
+          p.city,
+          p.country,
+          SUM(p.population) AS population,
+          p.latitude,
+          p.longitude,
+          ci.safety_index,
+          ci.crime_index
+        FROM population p
+        JOIN city_crime_index ci ON LOWER(p.city) = LOWER(ci.city)
+        WHERE LOWER(p.city) = LOWER($1)
+        GROUP BY
+          p.city,
+          p.country,
+          p.latitude,
+          p.longitude,
+          ci.safety_index,
+          ci.crime_index;
+      `,
+      [cityName]
+    );
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -60,15 +73,19 @@ app.get('/cities/:cityName', async (req, res) => {
 app.get('/cities/:cityName/hotels', async (req, res) => {
   try {
     const cityName = decodeURIComponent(req.params.cityName);
-    const result = await pool.query(`
-    SELECT
-      name,
-      city,
-      state,
-      hotel_class,
-      url
-    FROM offerings WHERE LOWER(city) = LOWER('${cityName}')
-      `);
+    const result = await pool.query(
+      `
+        SELECT
+          name,
+          city,
+          state,
+          hotel_class,
+          url
+        FROM offerings
+        WHERE LOWER(city) = LOWER($1)
+      `,
+      [cityName]
+    );
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -78,12 +95,16 @@ app.get('/cities/:cityName/hotels', async (req, res) => {
 app.get('/cities/:cityName/hotels/average_ratings', async (req, res) => {
   try {
     const cityName = decodeURIComponent(req.params.cityName);
-    const result = await pool.query(`
-    SELECT
-      name,
-      url
-    FROM offerings WHERE LOWER(city) = LOWER('${cityName}')
-      `);
+    const result = await pool.query(
+      `
+        SELECT
+          name,
+          url
+        FROM offerings
+        WHERE LOWER(city) = LOWER($1)
+      `,
+      [cityName]
+    );
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -93,10 +114,15 @@ app.get('/cities/:cityName/hotels/average_ratings', async (req, res) => {
 app.get('/hotels/:hotelName/reviews', async (req, res) => {
   try {
     const hotelName = decodeURIComponent(req.params.hotelName);
-    const result = await pool.query(`
-      SELECT * FROM reviews r JOIN offerings o ON r.offering_id = o.id
-      WHERE LOWER(o.name) = LOWER('${hotelName}')
-    `);
+    const result = await pool.query(
+      `
+        SELECT *
+        FROM reviews r
+        JOIN offerings o ON r.offering_id = o.id
+        WHERE LOWER(o.name) = LOWER($1)
+      `,
+      [hotelName]
+    );
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
