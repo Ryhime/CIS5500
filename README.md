@@ -60,6 +60,10 @@ All raw data is cleaned using Python (Pandas) before loading into PostgreSQL:
 ## Directories
 DataClean contains the code to clean 4 CSV files. A directory named "RawData" and a directory named "CleanedData" must be created and nested inside of DataClean prior to cleaning. The directory RawData also must be populate with the raw CSV files prior to running the cleaning code.
 
+The backend API is in `Backend/`; copy `Backend/.env.example` to `Backend/.env` and set `PGHOST`, `PGUSER`, `PGPASSWORD`, and `PGDATABASE` for Postgres.
+
+From `Backend/`, run `npm test` for Jest + Supertest API integration tests (they skip if those env vars are not set).
+
 ## Todo
 - Add Foreign Keys and Primary Keys to the database schema
 - Ensure all cities can be joined in the database
