@@ -10,4 +10,9 @@ export default defineConfig({
       '/hotels': 'http://localhost:3000',
     },
   },
+  test: {
+    environment: 'jsdom',
+    setupFiles: './test/setup.js',
+    globals: true,
+  },
 })
