@@ -72,23 +72,11 @@ Run all tests from this section.
 - `npm run test:integration` — API integration suite (`api.spec.js`)
 - `npm run test:real-data` — real DB/data integration suite (`real-data.spec.js`)
 
-Backend test notes:
-- Required env vars: `PGHOST`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` (optional: `PGPORT`, `PGSSLMODE`)
-- `test:integration` skips automatically if required DB env vars are missing.
-- `test:real-data` requires DB env vars and fails fast if missing.
-
 ### Frontend tests (`frontend/`)
 - `npm install`
 - `npm run test` — runs all Vitest tests
 - `npm run test:watch` — watch mode during development
 
-Frontend test files:
-- `test/App.test.jsx` (top-level route smoke coverage)
-- `test/components.test.jsx` (component render coverage)
-- `test/CityOverview.test.jsx`
-- `test/Hotels.test.jsx`
-- `test/Safety.test.jsx`
-- `test/Reviews.test.jsx`
 
 ## Todo
 - Add Foreign Keys and Primary Keys to the database schema
