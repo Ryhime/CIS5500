@@ -9,7 +9,7 @@ export default function SearchBar() {
     e.preventDefault();
     const q = city.trim();
     if (!q) return;
-    navigate(`/hotels?city=${encodeURIComponent(q)}`);
+    navigate(`/cities?city=${encodeURIComponent(q)}`);
   }
 
   return (
@@ -23,7 +23,7 @@ export default function SearchBar() {
         onChange={(e) => setCity(e.target.value)}
         style={{ flex: 1, maxWidth: "20rem" }}
       />
-      <button type="submit">Search hotels</button>
+      <button type="submit">Search city</button>
     </form>
   );
 }

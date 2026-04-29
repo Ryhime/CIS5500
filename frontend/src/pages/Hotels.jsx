@@ -23,7 +23,7 @@ export default function Hotels() {
     if (!city) return;
 
     let cancelled = false;
-    const url = `${API_BASE}/cities/${encodeURIComponent(city)}/hotels`;
+    const url = `${API_BASE}/cities/${encodeURIComponent(city)}/hotels/average_ratings`;
 
     (async () => {
       await Promise.resolve();
@@ -39,7 +39,7 @@ export default function Hotels() {
         if (cancelled) return;
         const normalized = (Array.isArray(rows) ? rows : []).map((row) => ({
           name: row.name,
-          rating: row.rating ?? row.average_rating ?? null,
+          rating: row.average_rating ?? row.rating ?? null,
         }));
         setHotels(normalized.length ? normalized : MOCK_HOTELS);
         setUsedMock(!normalized.length);
@@ -66,6 +66,11 @@ export default function Hotels() {
       <p>
         <Link to="/">← Back to search</Link>
       </p>
+      {city && (
+        <p>
+          <Link to={`/cities?city=${encodeURIComponent(city)}`}>← Back to city overview</Link>
+        </p>
+      )}
       {loading && <p>Loading…</p>}
       {city && error && <p role="status">{error}</p>}
       {!city && (

@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "test:integration": "node ./node_modules/jest/bin/jest.js --runInBand __tests__/api.spec.js",
+    "test:real-data": "node ./node_modules/jest/bin/jest.js --runInBand __tests__/real-data.spec.js"
   },
   "keywords": [],
   "author": "",

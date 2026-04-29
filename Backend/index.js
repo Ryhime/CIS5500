@@ -184,10 +184,14 @@ app.get('/cities/:cityName/hotels/average_ratings', async (req, res) => {
     const result = await getPool().query(
       `
         SELECT
-          name,
-          url
-        FROM offerings
-        WHERE LOWER(city) = LOWER($1)
+          o.name,
+          o.url,
+          AVG(NULLIF(BTRIM(r.overall_rating::text), '')::float) AS average_rating
+        FROM offerings o
+        JOIN reviews r ON r.offering_id = o.id
+        WHERE LOWER(o.city) = LOWER($1)
+        GROUP BY o.id, o.name, o.url
+        ORDER BY average_rating DESC NULLS LAST, o.name
       `,
       [cityName]
     );

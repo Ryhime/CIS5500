@@ -1,4 +1,4 @@
-import { BrowserRouter, NavLink, Routes, Route } from "react-router-dom";
+import { BrowserRouter, NavLink, Routes, Route, useLocation } from "react-router-dom";
 import Home from "./pages/Home";
 import CityOverview from "./pages/CityOverview";
 import Hotels from "./pages/Hotels";
@@ -6,6 +6,11 @@ import Safety from "./pages/Safety";
 import Reviews from "./pages/Reviews";
 
 function Layout() {
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const city = params.get("city")?.trim();
+  const cityQuery = city ? `?city=${encodeURIComponent(city)}` : "";
+
   return (
     <>
       <nav
@@ -19,10 +24,10 @@ function Layout() {
         }}
       >
         <NavLink to="/">Home</NavLink>
-        <NavLink to="/cities">Cities</NavLink>
-        <NavLink to="/hotels">Hotels</NavLink>
-        <NavLink to="/safety">Safety</NavLink>
-        <NavLink to="/reviews">Reviews</NavLink>
+        <NavLink to={`/cities${cityQuery}`}>Cities</NavLink>
+        <NavLink to={`/hotels${cityQuery}`}>Hotels</NavLink>
+        <NavLink to={`/safety${cityQuery}`}>Safety</NavLink>
+        <NavLink to={`/reviews${cityQuery}`}>Reviews</NavLink>
       </nav>
       <Routes>
         <Route path="/" element={<Home />} />
