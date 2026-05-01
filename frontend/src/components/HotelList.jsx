@@ -1,18 +1,15 @@
 export default function HotelList({ hotels = [] }) {
   if (!hotels.length) {
-    return <p>No hotels to show.</p>;
+    return <p className="status-line">No hotels to show.</p>;
   }
 
   return (
-    <ul>
+    <ul className="hotel-list">
       {hotels.map((h) => (
         <li key={h.name}>
-          <strong>{h.name}</strong>
+          <span className="name">{h.name}</span>
           {h.rating != null && (
-            <>
-              {" "}
-              — rating: {h.rating}
-            </>
+            <span className="rating">{Number(h.rating).toFixed(1)} ★ avg</span>
           )}
         </li>
       ))}

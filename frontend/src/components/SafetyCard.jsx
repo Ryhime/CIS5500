@@ -2,19 +2,30 @@ export default function SafetyCard({ data }) {
   if (!data) return null;
 
   return (
-    <article
-      style={{
-        border: "1px solid #ccc",
-        borderRadius: 8,
-        padding: "1rem",
-        marginBottom: "0.75rem",
-        maxWidth: "24rem",
-      }}
-    >
-      <h2 style={{ margin: "0 0 0.5rem", fontSize: "1.1rem" }}>
+    <div className="info-card-inner" style={{ padding: "1.15rem 1.35rem" }}>
+      <h2 className="info-card-title">
         {data.city}, {data.country}
       </h2>
-      <p style={{ margin: 0 }}>Safety index: {data.safety_index}</p>
-    </article>
+      <div className="stat-grid" style={{ marginTop: "0.75rem" }}>
+        {data.safety_index != null && (
+          <div className="stat-pill">
+            <strong>Safety index</strong>
+            <span className="info-row-strong">{data.safety_index}</span>
+          </div>
+        )}
+        {data.crime_index != null && (
+          <div className="stat-pill">
+            <strong>Crime index</strong>
+            {data.crime_index}
+          </div>
+        )}
+        {data.population != null && (
+          <div className="stat-pill">
+            <strong>Population</strong>
+            {data.population?.toLocaleString?.() ?? data.population}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

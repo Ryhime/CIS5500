@@ -50,8 +50,8 @@ describe("CityOverview page", () => {
     renderCityOverviewAt("/cities?city=Boston");
 
     expect(await screen.findByText("Boston")).toBeInTheDocument();
-    expect(await screen.findByText("5-day weather forecast")).toBeInTheDocument();
-    expect(await screen.findByText(/High 70F \/ Low 54F/)).toBeInTheDocument();
+    expect(await screen.findByText("5-day weather")).toBeInTheDocument();
+    expect(await screen.findByText(/High 70.*54/)).toBeInTheDocument();
   });
 
   test("shows guidance when city is not provided", () => {

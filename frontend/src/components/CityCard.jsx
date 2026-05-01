@@ -2,26 +2,32 @@ export default function CityCard({ city }) {
   if (!city) return null;
 
   return (
-    <article
-      style={{
-        border: "1px solid #ccc",
-        borderRadius: 8,
-        padding: "1rem",
-        maxWidth: "28rem",
-      }}
-    >
-      <h2 style={{ margin: "0 0 0.5rem", fontSize: "1.15rem" }}>
-        {city.city}
-      </h2>
-      <p style={{ margin: "0.25rem 0" }}>{city.country}</p>
-      <p style={{ margin: "0.25rem 0" }}>
-        Population: {city.population?.toLocaleString?.() ?? city.population}
-      </p>
-      {city.safety_index != null && (
-        <p style={{ margin: "0.25rem 0" }}>
-          Safety index: {city.safety_index}
+    <div className="info-card-inner">
+      <h2 className="info-card-title">{city.city}</h2>
+      <p className="info-card-muted">{city.country}</p>
+      <div className="stat-grid">
+        <div className="stat-pill">
+          <strong>Population</strong>
+          {city.population?.toLocaleString?.() ?? city.population ?? "—"}
+        </div>
+        {city.safety_index != null && (
+          <div className="stat-pill">
+            <strong>Safety index</strong>
+            <span className="info-row-strong">{city.safety_index}</span>
+          </div>
+        )}
+        {city.crime_index != null && (
+          <div className="stat-pill">
+            <strong>Crime index</strong>
+            {city.crime_index}
+          </div>
+        )}
+      </div>
+      {city.latitude != null && city.longitude != null && (
+        <p className="info-row info-card-muted" style={{ marginTop: "0.85rem" }}>
+          {Number(city.latitude).toFixed(3)}°, {Number(city.longitude).toFixed(3)}°
         </p>
       )}
-    </article>
+    </div>
   );
 }

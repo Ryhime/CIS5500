@@ -47,9 +47,9 @@ describe("Reviews page", () => {
 
     renderReviewsAt("/reviews?city=Boston");
 
-    expect(await screen.findByLabelText("Hotel:")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Hotel")).toBeInTheDocument();
     expect(await screen.findByText("Great stay")).toBeInTheDocument();
-    expect(await screen.findByText(/Overall rating: 5/)).toBeInTheDocument();
+    expect(await screen.findByText(/Overall 5/)).toBeInTheDocument();
   });
 
   test("shows hotel-loading API error", async () => {

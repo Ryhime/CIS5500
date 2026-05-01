@@ -13,17 +13,19 @@ export default function SearchBar() {
   }
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: "flex", gap: "0.5rem" }}>
+    <form className="search-form" onSubmit={handleSubmit}>
       <input
         id="city-search"
+        className="search-input"
         type="search"
         aria-label="City name"
-        placeholder="City name"
+        placeholder="Try Tokyo, Paris, Boston…"
         value={city}
         onChange={(e) => setCity(e.target.value)}
-        style={{ flex: 1, maxWidth: "20rem" }}
       />
-      <button type="submit">Search city</button>
+      <button type="submit" className="btn-primary">
+        Search city
+      </button>
     </form>
   );
 }

@@ -38,7 +38,8 @@ describe("Safety page", () => {
     renderSafetyAt("/safety?city=Boston");
 
     expect(await screen.findByText("Boston, United States")).toBeInTheDocument();
-    expect(await screen.findByText(/Safety index: 61/)).toBeInTheDocument();
+    expect(await screen.findByText("Safety index")).toBeInTheDocument();
+    expect(screen.getByText("61")).toBeInTheDocument();
   });
 
   test("shows API error state", async () => {

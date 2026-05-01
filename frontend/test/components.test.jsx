@@ -20,8 +20,9 @@ describe("UI components", () => {
 
     expect(screen.getByText("New York")).toBeInTheDocument();
     expect(screen.getByText("United States")).toBeInTheDocument();
-    expect(screen.getByText(/Population:/)).toBeInTheDocument();
-    expect(screen.getByText(/Safety index:/)).toBeInTheDocument();
+    expect(screen.getByText("Population")).toBeInTheDocument();
+    expect(screen.getByText("Safety index")).toBeInTheDocument();
+    expect(screen.getByText("52.1")).toBeInTheDocument();
   });
 
   test("HotelList renders fallback when empty", () => {
@@ -46,7 +47,8 @@ describe("UI components", () => {
   test("SafetyCard renders city and safety index", () => {
     render(<SafetyCard data={{ city: "Boston", country: "United States", safety_index: 61 }} />);
     expect(screen.getByText("Boston, United States")).toBeInTheDocument();
-    expect(screen.getByText(/Safety index: 61/)).toBeInTheDocument();
+    expect(screen.getByText("Safety index")).toBeInTheDocument();
+    expect(screen.getByText("61")).toBeInTheDocument();
   });
 
   test("Home page renders search prompt and action", () => {
@@ -56,7 +58,7 @@ describe("UI components", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText("Travel App")).toBeInTheDocument();
+    expect(screen.getByText(/Plan with context/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Search city" })).toBeInTheDocument();
     expect(screen.getByLabelText("City name")).toBeInTheDocument();
   });

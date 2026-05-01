@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import HotelList from "../components/HotelList";
+import PageNavLinks from "../components/PageNavLinks";
 
 const MOCK_HOTELS = [
   { name: "Hotel Beacon", rating: 4.5 },
@@ -61,25 +62,52 @@ export default function Hotels() {
   const displayHotels = city ? hotels : [];
 
   return (
-    <div>
-      <h1>Hotels{city ? ` in ${city}` : ""}</h1>
-      <p>
-        <Link to="/">← Back to search</Link>
-      </p>
-      {city && (
-        <p>
-          <Link to={`/cities?city=${encodeURIComponent(city)}`}>← Back to city overview</Link>
+    <main className="page">
+      <header className="page-head">
+        <p className="page-kicker">Stays</p>
+        <h1 className="page-title">
+          {city ? `Hotels in ${city}` : "Hotels"}
+        </h1>
+        <p className="page-lede">
+          Average guest ratings from your reviews data, sorted for each city.
+        </p>
+      </header>
+
+      <nav className="page-nav" aria-label="Section">
+        <Link className="link-back" to="/">
+          Home
+        </Link>
+        {city && (
+          <>
+            <span className="page-nav-sep" aria-hidden>
+              ·
+            </span>
+            <Link className="link-back" to={`/cities?city=${encodeURIComponent(city)}`}>
+              City overview
+            </Link>
+          </>
+        )}
+      </nav>
+
+      {city && <PageNavLinks cityName={city} />}
+
+      {loading && <p className="status-line">Loading…</p>}
+      {city && error && (
+        <p className="status-line status-error" role="status">
+          {error}
         </p>
       )}
-      {loading && <p>Loading…</p>}
-      {city && error && <p role="status">{error}</p>}
       {!city && (
-        <p>Enter a city on the home page to load hotels for that city.</p>
+        <div className="card card-muted">
+          <p className="card-body">
+            Enter a city on the home page to load hotels for that city.
+          </p>
+        </div>
       )}
       {city && !loading && usedMock && !error && (
-        <p>No rows returned; showing sample hotels.</p>
+        <p className="status-line">No rows returned; showing sample hotels.</p>
       )}
       {city && <HotelList hotels={displayHotels} />}
-    </div>
+    </main>
   );
 }

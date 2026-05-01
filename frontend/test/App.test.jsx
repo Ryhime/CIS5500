@@ -10,7 +10,13 @@ describe("App routing smoke tests", () => {
   test("renders home route", () => {
     window.history.pushState({}, "", "/");
     render(<App />);
-    expect(screen.getByText("Travel App")).toBeInTheDocument();
+    expect(screen.getByText(/Plan with context/i)).toBeInTheDocument();
+  });
+
+  test("renders map route", () => {
+    window.history.pushState({}, "", "/map");
+    render(<App />);
+    expect(screen.getByRole("heading", { name: /City map/i })).toBeInTheDocument();
   });
 
   test("renders cities route", () => {

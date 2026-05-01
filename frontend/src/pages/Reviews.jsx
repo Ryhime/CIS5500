@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import PageNavLinks from "../components/PageNavLinks";
 
 /** Empty string = same origin in dev (Vite proxies API routes). */
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
@@ -21,6 +22,8 @@ export default function Reviews() {
     const url = `${API_BASE}/cities/${encodeURIComponent(cityName)}/hotels`;
 
     (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
       setLoadingHotels(true);
       setError(null);
       setHotels([]);
@@ -54,6 +57,8 @@ export default function Reviews() {
     const url = `${API_BASE}/hotels/${encodeURIComponent(selectedHotel)}/reviews`;
 
     (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
       setLoadingReviews(true);
       setError(null);
       setReviews([]);
@@ -76,27 +81,61 @@ export default function Reviews() {
   }, [selectedHotel]);
 
   return (
-    <div>
-      <h1>Reviews{cityName ? ` in ${cityName}` : ""}</h1>
-      <p>
-        <Link to="/">← Back to search</Link>
-      </p>
-      {cityName && (
-        <p>
-          <Link to={`/cities?city=${encodeURIComponent(cityName)}`}>← Back to city overview</Link>
+    <main className="page">
+      <header className="page-head">
+        <p className="page-kicker">Guest voice</p>
+        <h1 className="page-title">
+          {cityName ? `Reviews · ${cityName}` : "Reviews"}
+        </h1>
+        <p className="page-lede">
+          Pick a hotel in this city, then load real review rows from the API.
+        </p>
+      </header>
+
+      <nav className="page-nav" aria-label="Section">
+        <Link className="link-back" to="/">
+          Home
+        </Link>
+        {cityName && (
+          <>
+            <span className="page-nav-sep" aria-hidden>
+              ·
+            </span>
+            <Link className="link-back" to={`/cities?city=${encodeURIComponent(cityName)}`}>
+              City overview
+            </Link>
+          </>
+        )}
+      </nav>
+
+      {cityName && <PageNavLinks cityName={cityName} />}
+
+      {!cityName && (
+        <div className="card card-muted">
+          <p className="card-body">
+            Search for a city from the home page to view hotel reviews.
+          </p>
+        </div>
+      )}
+      {cityName && loadingHotels && <p className="status-line">Loading hotels…</p>}
+      {cityName && error && (
+        <p className="status-line status-error" role="status">
+          {error}
         </p>
       )}
-      {!cityName && <p>Search for a city from the home page to view hotel reviews.</p>}
-      {cityName && loadingHotels && <p>Loading hotels...</p>}
-      {cityName && error && <p role="status">{error}</p>}
       {cityName && !loadingHotels && !error && hotels.length === 0 && (
-        <p>No hotels found for "{cityName}".</p>
+        <div className="card card-muted">
+          <p className="card-body">
+            No hotels found for &ldquo;{cityName}&rdquo;.
+          </p>
+        </div>
       )}
       {hotels.length > 0 && (
-        <>
-          <label htmlFor="hotel-select">Hotel:</label>{" "}
+        <div className="reviews-toolbar">
+          <label htmlFor="hotel-select">Hotel</label>
           <select
             id="hotel-select"
+            className="select-input"
             value={selectedHotel}
             onChange={(e) => setSelectedHotel(e.target.value)}
           >
@@ -106,24 +145,33 @@ export default function Reviews() {
               </option>
             ))}
           </select>
-        </>
+        </div>
       )}
-      {selectedHotel && loadingReviews && <p>Loading reviews...</p>}
+      {selectedHotel && loadingReviews && (
+        <p className="status-line">Loading reviews…</p>
+      )}
       {selectedHotel && !loadingReviews && !error && reviews.length === 0 && (
-        <p>No reviews found for "{selectedHotel}".</p>
+        <p className="status-line">
+          No reviews found for &ldquo;{selectedHotel}&rdquo;.
+        </p>
       )}
       {reviews.length > 0 && (
-        <ul style={{ paddingLeft: "1rem" }}>
-          {reviews.slice(0, 20).map((r) => (
-            <li key={r.id} style={{ marginBottom: "0.75rem" }}>
-              <strong>{r.title || "Untitled review"}</strong>
-              <div>By: {r.author || "Unknown"}{r.date ? ` on ${r.date}` : ""}</div>
-              {r.overall_rating != null && <div>Overall rating: {r.overall_rating}</div>}
-              {r.text && <div>{r.text}</div>}
+        <ul className="review-list">
+          {reviews.slice(0, 20).map((r, idx) => (
+            <li key={r.id ?? `rev-${idx}`} className="review-card">
+              <h3>{r.title || "Untitled review"}</h3>
+              <div className="review-meta">
+                {r.author || "Unknown"}
+                {r.date ? ` · ${r.date}` : ""}
+              </div>
+              {r.overall_rating != null && (
+                <div className="review-rating">Overall {r.overall_rating}</div>
+              )}
+              {r.text && <p className="review-text">{r.text}</p>}
             </li>
           ))}
         </ul>
       )}
-    </div>
+    </main>
   );
 }
