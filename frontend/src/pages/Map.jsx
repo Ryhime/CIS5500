@@ -5,9 +5,15 @@ import CityLeafletMap from "../components/CityLeafletMap";
 /** Empty string = same origin in dev (Vite proxies API routes). */
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
+/** Fixed point to verify Leaflet when the API has no coordinates yet. */
+const DEMO_LAT = 42.3601;
+const DEMO_LNG = -71.0589;
+const DEMO_LABEL = "Demo pin (Boston area — not from your API)";
+
 export default function Map() {
   const [params] = useSearchParams();
   const cityName = params.get("city")?.trim() ?? "";
+  const mapdemo = params.get("mapdemo") === "1";
 
   const [city, setCity] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -52,6 +58,16 @@ export default function Map() {
     Number.isFinite(Number(lat)) &&
     Number.isFinite(Number(lng));
 
+  const showRealMap = hasCoords;
+  /** `?mapdemo=1` — always preview tiles. Dev + city + no coords — preview after failed/empty API. */
+  const showDemoMap =
+    !loading &&
+    !showRealMap &&
+    (mapdemo ||
+      (import.meta.env.DEV &&
+        Boolean(cityName) &&
+        (Boolean(error) || (!error && !hasCoords))));
+
   return (
     <main className="page">
       <header className="page-head">
@@ -60,8 +76,9 @@ export default function Map() {
           {cityName ? `Map · ${cityName}` : "City map"}
         </h1>
         <p className="page-lede">
-          Coordinates come from your city overview API. Search a city first,
-          then open this page to see it on the map.
+          Coordinates come from <code>GET /cities/:cityName</code>. Search a city
+          first, then open Map from the nav. To test tiles without API data, add{" "}
+          <code>?mapdemo=1</code> to this URL (any environment).
         </p>
       </header>
 
@@ -84,10 +101,14 @@ export default function Map() {
         )}
       </nav>
 
-      {!cityName && (
+      {!cityName && !mapdemo && (
         <div className="card card-muted">
           <p className="card-body">
-            Search for a city from the home page to drop a pin on the map.
+            Search for a city from the home page to drop a pin on the map. Or open{" "}
+            <Link to="/map?mapdemo=1" className="link-back">
+              /map?mapdemo=1
+            </Link>{" "}
+            to preview the map without API coordinates.
           </p>
         </div>
       )}
@@ -98,7 +119,7 @@ export default function Map() {
           {error}
         </p>
       )}
-      {cityName && !loading && !error && !hasCoords && (
+      {cityName && !loading && !error && !hasCoords && !showDemoMap && (
         <div className="card card-muted">
           <p className="card-body">
             No coordinates found for &ldquo;{cityName}&rdquo;. Try another
@@ -107,7 +128,7 @@ export default function Map() {
         </div>
       )}
 
-      {hasCoords && (
+      {showRealMap && (
         <section className="map-section" aria-label="City map">
           <CityLeafletMap
             lat={Number(lat)}
@@ -116,6 +137,22 @@ export default function Map() {
           />
           <p className="map-meta">
             {Number(lat).toFixed(4)}°, {Number(lng).toFixed(4)}°
+          </p>
+        </section>
+      )}
+
+      {showDemoMap && (
+        <section className="map-section" aria-label="Demo map preview">
+          <div className="card card-muted map-demo-banner">
+            <p className="card-body">
+              {mapdemo
+                ? "Demo mode (?mapdemo=1): map tiles and marker only — not tied to your database."
+                : "Dev preview: API did not return coordinates yet; showing a fixed demo pin."}
+            </p>
+          </div>
+          <CityLeafletMap lat={DEMO_LAT} lng={DEMO_LNG} label={DEMO_LABEL} />
+          <p className="map-meta">
+            {DEMO_LAT.toFixed(4)}°, {DEMO_LNG.toFixed(4)}° (demo)
           </p>
         </section>
       )}
