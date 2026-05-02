@@ -22,7 +22,7 @@ export default function SafetyCard({ data }) {
         {data.population != null && (
           <div className="stat-pill">
             <strong>Population</strong>
-            {data.population?.toLocaleString?.() ?? data.population}
+            {Math.round(data.population).toLocaleString()}
           </div>
         )}
       </div>

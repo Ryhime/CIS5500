@@ -1,42 +1,26 @@
 import pandas as pd
-import country_converter as coco
 import pycountry
-import string
-from thefuzz import process, fuzz
-import geonamescache
 
-cc = coco.CountryConverter()
+df = pd.read_csv("RawData/worldcitiespop.csv", low_memory=False)
 
-df = pd.read_csv("RawData/worldcitiespop.csv")
+df = df.dropna(subset=["Population", "Latitude", "Longitude"])
+df = df[df["Population"] > 0]
 
-df["Country"] = cc.convert(names=df["Country"], to="name_short")
+df["city"] = df["AccentCity"].fillna(df["City"])
 
-def standardize_country(name):
+# Convert 2-letter country code to full country name
+def expand_country(code):
     try:
-        return pycountry.countries.lookup(name).name
-    except LookupError:
-        return name
+        return pycountry.countries.get(alpha_2=code.upper()).name
+    except Exception:
+        return None
 
-df["Country"] = df["Country"].map(standardize_country)
+df["country"] = df["Country"].map(expand_country)
+df = df.dropna(subset=["country"])
 
-df["City"] = list(map(lambda x: string.capwords(x) if type(x) is str else x, list(df["City"])))
-del df["AccentCity"]
-del df["Region"]
+df = df.rename(columns={"Population": "population", "Latitude": "latitude", "Longitude": "longitude"})
 
-gc = geonamescache.GeonamesCache()
-reference_cities = [c["name"] for c in gc.get_cities().values()]
+df[["city", "country", "population", "latitude", "longitude"]].to_csv(
+    "CleanedData/Cleaned_Population.csv", index=False
+)
 
-def standardize_city(name, threshold=85):
-    if not isinstance(name, str) or name.strip() == "":
-        return name
-    match, score = process.extractOne(name, reference_cities, scorer=fuzz.token_set_ratio)
-    return match if score >= threshold else name
-
-unique_cities = df[["City", "Country"]].drop_duplicates()
-unique_cities["City_Clean"] = unique_cities["City"].map(standardize_city)
-
-df = df.merge(unique_cities, on=["City", "Country"])
-df["City"] = df["City_Clean"]
-del df["City_Clean"]
-
-df.to_csv("CleanedData/Cleaned_Population.csv", index=False)

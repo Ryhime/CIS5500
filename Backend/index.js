@@ -8,14 +8,6 @@ const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
 app.use(express.json());
 
-function requireEnv(name) {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
-  return value;
-}
-
 function parsePositiveInt(value, fallback) {
   if (value === undefined || value === null || value === '') return fallback;
   const n = Number(value);
@@ -27,12 +19,12 @@ let pool;
 function getPool() {
   if (pool) return pool;
   pool = new Pool({
-    host: requireEnv('PGHOST'),
-    port: process.env.PGPORT ? Number(process.env.PGPORT) : 5432,
-    user: requireEnv('PGUSER'),
-    password: requireEnv('PGPASSWORD'),
-    database: requireEnv('PGDATABASE'),
-    ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false },
+    host: "database-1.cbam8vucodhx.us-east-1.rds.amazonaws.com",
+    port: 5432,
+    user: "postgres",
+    password: "cis5550databaseworldtravel",
+    ssl: { rejectUnauthorized: false },
+    database: "postgres"
   });
   return pool;
 }
@@ -52,8 +44,6 @@ app.get('/cities', async (req, res) => {
   }
 });
 
-// Route 1: Get Safest Cities
-// GET /cities/safest?country=...&limit=...
 app.get('/cities/safest', async (req, res) => {
   try {
     const country = req.query.country;
@@ -76,8 +66,6 @@ app.get('/cities/safest', async (req, res) => {
   }
 });
 
-// Route 5: Get City Population
-// GET /cities/population?city=...&country=...
 app.get('/cities/population', async (req, res) => {
   try {
     const city = req.query.city;
@@ -104,8 +92,6 @@ app.get('/cities/population', async (req, res) => {
   }
 });
 
-// Route 6: Get Most Dangerous Cities
-// GET /cities/most-dangerous?limit=...
 app.get('/cities/most-dangerous', async (req, res) => {
   try {
     const limit = Math.min(parsePositiveInt(req.query.limit, 10), 100);
@@ -138,7 +124,7 @@ app.get('/cities/:cityName', async (req, res) => {
           ci.safety_index,
           ci.crime_index
         FROM population p
-        JOIN city_crime_index ci ON LOWER(p.city) = LOWER(ci.city)
+        LEFT JOIN city_crime_index ci ON LOWER(p.city) = LOWER(ci.city)
         WHERE LOWER(p.city) = LOWER($1)
         GROUP BY
           p.city,
@@ -201,8 +187,6 @@ app.get('/cities/:cityName/hotels/average_ratings', async (req, res) => {
   }
 });
 
-// Route 2: Get Top Rated Hotels in a City
-// GET /hotels/top-rated?city=...
 app.get('/hotels/top-rated', async (req, res) => {
   try {
     const city = req.query.city;
@@ -228,8 +212,6 @@ app.get('/hotels/top-rated', async (req, res) => {
   }
 });
 
-// Route 3: Get Hotel URL
-// GET /hotel/url?name=...
 app.get('/hotel/url', async (req, res) => {
   try {
     const name = req.query.name;
@@ -255,8 +237,6 @@ app.get('/hotel/url', async (req, res) => {
   }
 });
 
-// Route 4: Get Overhyped Hotels
-// GET /hotels/overhyped
 app.get('/hotels/overhyped', async (req, res) => {
   try {
     const result = await getPool().query(`
@@ -278,8 +258,6 @@ app.get('/hotels/overhyped', async (req, res) => {
   }
 });
 
-// Route 7: Get Top Hotels by Rating and Safety
-// GET /hotels/top-safe-rated?limit=...
 app.get('/hotels/top-safe-rated', async (req, res) => {
   try {
     const limit = Math.min(parsePositiveInt(req.query.limit, 20), 100);
@@ -321,8 +299,6 @@ app.get('/hotels/top-safe-rated', async (req, res) => {
   }
 });
 
-// Route 8: Get Hotels by Room Rating
-// GET /hotels/room-ratings
 app.get('/hotels/room-ratings', async (req, res) => {
   try {
     const result = await getPool().query(`
@@ -343,8 +319,6 @@ app.get('/hotels/room-ratings', async (req, res) => {
   }
 });
 
-// Route 9: Get Hotels by Rating, Safety, and Population
-// GET /hotels/filtered
 app.get('/hotels/filtered', async (req, res) => {
   try {
     const result = await getPool().query(`
@@ -386,8 +360,6 @@ app.get('/hotels/filtered', async (req, res) => {
   }
 });
 
-// Route 10: Get Top Hotels with City Info
-// GET /hotels/top-overall?limit=...
 app.get('/hotels/top-overall', async (req, res) => {
   try {
     const limit = Math.min(parsePositiveInt(req.query.limit, 20), 100);

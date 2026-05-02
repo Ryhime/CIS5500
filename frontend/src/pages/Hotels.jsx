@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import HotelList from "../components/HotelList";
 import PageNavLinks from "../components/PageNavLinks";
 
@@ -73,25 +73,11 @@ export default function Hotels() {
         </p>
       </header>
 
-      <nav className="page-nav" aria-label="Section">
-        <Link className="link-back" to="/">
-          Home
-        </Link>
-        {city && (
-          <>
-            <span className="page-nav-sep" aria-hidden>
-              ·
-            </span>
-            <Link className="link-back" to={`/cities?city=${encodeURIComponent(city)}`}>
-              City overview
-            </Link>
-          </>
-        )}
-      </nav>
+
 
       {city && <PageNavLinks cityName={city} />}
 
-      {loading && <p className="status-line">Loading…</p>}
+      {city && loading && <p className="status-line">Loading…</p>}
       {city && error && (
         <p className="status-line status-error" role="status">
           {error}
@@ -107,7 +93,7 @@ export default function Hotels() {
       {city && !loading && usedMock && !error && (
         <p className="status-line">No rows returned; showing sample hotels.</p>
       )}
-      {city && <HotelList hotels={displayHotels} />}
+      {city && !loading && <HotelList hotels={displayHotels} />}
     </main>
   );
 }
