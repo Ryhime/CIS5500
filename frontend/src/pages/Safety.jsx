@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import SafetyCard from "../components/SafetyCard";
 import PageNavLinks from "../components/PageNavLinks";
 
@@ -55,21 +55,7 @@ export default function Safety() {
         </p>
       </header>
 
-      <nav className="page-nav" aria-label="Section">
-        <Link className="link-back" to="/">
-          Home
-        </Link>
-        {cityName && (
-          <>
-            <span className="page-nav-sep" aria-hidden>
-              ·
-            </span>
-            <Link className="link-back" to={`/cities?city=${encodeURIComponent(cityName)}`}>
-              City overview
-            </Link>
-          </>
-        )}
-      </nav>
+
 
       {cityName && <PageNavLinks cityName={cityName} />}
 

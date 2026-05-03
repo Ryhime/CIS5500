@@ -5,6 +5,9 @@ export default function PageNavLinks({ cityName }) {
   const q = `?city=${encodeURIComponent(cityName)}`;
   return (
     <nav className="page-nav" aria-label="City sections">
+      <Link className="pill-link" to="/">
+        Home
+      </Link>
       <Link className="pill-link" to={`/cities${q}`}>
         Overview
       </Link>

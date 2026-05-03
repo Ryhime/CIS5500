@@ -17,15 +17,12 @@ function apiGet(path, query) {
 
 function dbConfig() {
   return {
-    host: process.env.PGHOST,
-    port: process.env.PGPORT ? Number(process.env.PGPORT) : 5432,
-    user: process.env.PGUSER,
-    password: process.env.PGPASSWORD,
-    database: process.env.PGDATABASE,
-    ssl: process.env.PGSSLMODE === 'disable' ? false : { rejectUnauthorized: false },
-    connectionTimeoutMillis: 10_000,
-    query_timeout: 10_000,
-    statement_timeout: 10_000,
+    host: "database-1.cbam8vucodhx.us-east-1.rds.amazonaws.com",
+    port: 5432,
+    user: "postgres",
+    password: "cis5550databaseworldtravel",
+    ssl: { rejectUnauthorized: false },
+    database: "postgres"
   };
 }
 
@@ -34,12 +31,6 @@ describe('Real-data API integration', () => {
   let data;
 
   beforeAll(async () => {
-    const required = ['PGHOST', 'PGUSER', 'PGPASSWORD', 'PGDATABASE'];
-    const missing = required.filter((k) => !process.env[k]);
-    if (missing.length) {
-      throw new Error(`Missing required env vars: ${missing.join(', ')}`);
-    }
-
     pool = new Pool(dbConfig());
     await pool.query('SELECT 1 AS ok');
 
