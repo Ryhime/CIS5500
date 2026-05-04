@@ -46,19 +46,15 @@ app.get('/cities', async (req, res) => {
 
 app.get('/cities/safest', async (req, res) => {
   try {
-    const country = req.query.country;
-    if (!country) return res.status(400).json({ error: 'Missing required query param: country' });
-
     const limit = Math.min(parsePositiveInt(req.query.limit, 10), 100);
     const result = await getPool().query(
       `
-        SELECT city, country, safety_index
+        SELECT city, (100 - crime_index) AS safety_index
         FROM city_crime_index
-        WHERE LOWER(country) = LOWER($1)
         ORDER BY safety_index DESC NULLS LAST
-        LIMIT $2;
+        LIMIT $1;
       `,
-      [String(country), limit]
+      [limit]
     );
     res.json(result.rows);
   } catch (err) {
@@ -69,18 +65,16 @@ app.get('/cities/safest', async (req, res) => {
 app.get('/cities/population', async (req, res) => {
   try {
     const city = req.query.city;
-    const country = req.query.country;
     if (!city) return res.status(400).json({ error: 'Missing required query param: city' });
-    if (!country) return res.status(400).json({ error: 'Missing required query param: country' });
 
     const result = await getPool().query(
       `
-        SELECT city, country, SUM(population) AS population
+        SELECT city, SUM(population) AS population
         FROM population
-        WHERE LOWER(city) = LOWER($1) AND LOWER(country) = LOWER($2)
-        GROUP BY city, country;
+        WHERE LOWER(city) = LOWER($1)
+        GROUP BY city;
       `,
-      [String(city), String(country)]
+      [String(city)]
     );
 
     if (result.rows.length === 0) {
@@ -97,7 +91,7 @@ app.get('/cities/most-dangerous', async (req, res) => {
     const limit = Math.min(parsePositiveInt(req.query.limit, 10), 100);
     const result = await getPool().query(
       `
-        SELECT city, country, crime_index
+        SELECT city, crime_index
         FROM city_crime_index
         ORDER BY crime_index DESC NULLS LAST
         LIMIT $1;
@@ -117,21 +111,18 @@ app.get('/cities/:cityName', async (req, res) => {
       `
         SELECT
           p.city,
-          p.country,
           SUM(p.population) AS population,
           p.latitude,
           p.longitude,
-          ci.safety_index,
+          (100 - ci.crime_index) AS safety_index,
           ci.crime_index
         FROM population p
         LEFT JOIN city_crime_index ci ON LOWER(p.city) = LOWER(ci.city)
         WHERE LOWER(p.city) = LOWER($1)
         GROUP BY
           p.city,
-          p.country,
           p.latitude,
           p.longitude,
-          ci.safety_index,
           ci.crime_index;
       `,
       [cityName]
@@ -150,7 +141,8 @@ app.get('/cities/:cityName/hotels', async (req, res) => {
         SELECT
           name,
           city,
-          state,
+          street_address,
+          type,
           hotel_class,
           url
         FROM offerings
@@ -263,12 +255,7 @@ app.get('/hotels/top-safe-rated', async (req, res) => {
     const limit = Math.min(parsePositiveInt(req.query.limit, 20), 100);
     const result = await getPool().query(
       `
-        WITH city_country AS (
-          SELECT LOWER(city) AS city_key, LOWER(country) AS country_key, city, country
-          FROM population
-          GROUP BY LOWER(city), LOWER(country), city, country
-        ),
-        hotel_ratings AS (
+        WITH hotel_ratings AS (
           SELECT
             r.offering_id,
             AVG(NULLIF(BTRIM(r.overall_rating::text), '')::float) AS average_rating
@@ -278,17 +265,13 @@ app.get('/hotels/top-safe-rated', async (req, res) => {
         SELECT
           o.name AS hotel_name,
           o.city,
-          o.state,
           o.hotel_class,
           hr.average_rating AS average_rating,
-          ci.safety_index
+          (100 - ci.crime_index) AS safety_index
         FROM offerings o
         JOIN hotel_ratings hr ON hr.offering_id = o.id
-        JOIN city_country cc ON LOWER(o.city) = cc.city_key
-        JOIN city_crime_index ci
-          ON LOWER(ci.city) = cc.city_key
-         AND LOWER(ci.country) = cc.country_key
-        ORDER BY hr.average_rating DESC NULLS LAST, ci.safety_index DESC NULLS LAST
+        JOIN city_crime_index ci ON LOWER(ci.city) = LOWER(o.city)
+        ORDER BY hr.average_rating DESC NULLS LAST, (100 - ci.crime_index) DESC NULLS LAST
         LIMIT $1;
       `,
       [limit]
@@ -325,10 +308,9 @@ app.get('/hotels/filtered', async (req, res) => {
       WITH city_stats AS (
         SELECT
           LOWER(city) AS city_key,
-          LOWER(country) AS country_key,
           SUM(population)::bigint AS city_population
         FROM population
-        GROUP BY LOWER(city), LOWER(country)
+        GROUP BY LOWER(city)
       ),
       hotel_room_ratings AS (
         SELECT
@@ -342,16 +324,14 @@ app.get('/hotels/filtered', async (req, res) => {
         o.city,
         o.hotel_class,
         hrr.average_rooms_rating,
-        ci.safety_index,
+        (100 - ci.crime_index) AS safety_index,
         cs.city_population
       FROM offerings o
       JOIN hotel_room_ratings hrr ON hrr.offering_id = o.id
       JOIN city_stats cs ON LOWER(o.city) = cs.city_key
-      JOIN city_crime_index ci
-        ON LOWER(ci.city) = cs.city_key
-       AND LOWER(ci.country) = cs.country_key
-      WHERE cs.city_population >= 100000 AND ci.safety_index > 50
-      ORDER BY hrr.average_rooms_rating DESC NULLS LAST, ci.safety_index DESC NULLS LAST, cs.city_population DESC
+      JOIN city_crime_index ci ON LOWER(ci.city) = cs.city_key
+      WHERE cs.city_population >= 100000 AND (100 - ci.crime_index) > 50
+      ORDER BY hrr.average_rooms_rating DESC NULLS LAST, (100 - ci.crime_index) DESC NULLS LAST, cs.city_population DESC
       LIMIT 200;
     `);
     res.json(result.rows);
@@ -368,10 +348,9 @@ app.get('/hotels/top-overall', async (req, res) => {
         WITH city_stats AS (
           SELECT
             LOWER(city) AS city_key,
-            LOWER(country) AS country_key,
             SUM(population)::bigint AS city_population
           FROM population
-          GROUP BY LOWER(city), LOWER(country)
+          GROUP BY LOWER(city)
         ),
         hotel_ratings AS (
           SELECT
@@ -385,14 +364,12 @@ app.get('/hotels/top-overall', async (req, res) => {
           o.city,
           o.hotel_class,
           hr.average_rating AS average_rating,
-          ci.safety_index,
+          (100 - ci.crime_index) AS safety_index,
           cs.city_population
         FROM offerings o
         JOIN hotel_ratings hr ON hr.offering_id = o.id
         JOIN city_stats cs ON LOWER(o.city) = cs.city_key
-        JOIN city_crime_index ci
-          ON LOWER(ci.city) = cs.city_key
-         AND LOWER(ci.country) = cs.country_key
+        JOIN city_crime_index ci ON LOWER(ci.city) = cs.city_key
         ORDER BY hr.average_rating DESC NULLS LAST
         LIMIT $1;
       `,

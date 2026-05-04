@@ -64,19 +64,12 @@ describeIf('Backend API (integration)', () => {
     expect(Array.isArray(res.body)).toBe(true);
   });
 
-  test('GET /cities/safest validates required country', async () => {
-    const res = await apiGet(app, '/cities/safest');
-    expect(res.status).toBe(400);
-    expect(res.body).toHaveProperty('error');
-  });
-
-  test('GET /cities/safest returns rows for configured country', async () => {
-    const res = await apiGet(app, '/cities/safest', { country: TEST_COUNTRY, limit: TEST_LIMIT });
+  test('GET /cities/safest returns rows', async () => {
+    const res = await apiGet(app, '/cities/safest', { limit: TEST_LIMIT });
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
     if (res.body.length > 0) {
       expect(res.body[0]).toHaveProperty('city');
-      expect(res.body[0]).toHaveProperty('country');
       expect(res.body[0]).toHaveProperty('safety_index');
     }
   });
@@ -87,24 +80,22 @@ describeIf('Backend API (integration)', () => {
     expect(Array.isArray(res.body)).toBe(true);
     if (res.body.length > 0) {
       expect(res.body[0]).toHaveProperty('city');
-      expect(res.body[0]).toHaveProperty('country');
       expect(res.body[0]).toHaveProperty('crime_index');
     }
   });
 
-  test('GET /cities/population validates required params', async () => {
-    const res = await apiGet(app, '/cities/population', { city: TEST_CITY });
+  test('GET /cities/population validates required city param', async () => {
+    const res = await apiGet(app, '/cities/population');
     expect(res.status).toBe(400);
     expect(res.body).toHaveProperty('error');
   });
 
-  test('GET /cities/population returns a single object for configured city/country', async () => {
-    const res = await apiGet(app, '/cities/population', { city: TEST_CITY, country: TEST_COUNTRY });
-    // Some datasets might not include this exact pairing; allow 404.
+  test('GET /cities/population returns a single object for configured city', async () => {
+    const res = await apiGet(app, '/cities/population', { city: TEST_CITY });
+    // Some datasets might not include this exact city; allow 404.
     expect([200, 404]).toContain(res.status);
     if (res.status === 200) {
       expect(res.body).toHaveProperty('city');
-      expect(res.body).toHaveProperty('country');
       expect(res.body).toHaveProperty('population');
     }
   });
