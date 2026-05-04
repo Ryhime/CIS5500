@@ -87,9 +87,6 @@ export default function Reviews() {
         <h1 className="page-title">
           {cityName ? `Reviews · ${cityName}` : "Reviews"}
         </h1>
-        <p className="page-lede">
-          Pick a hotel in this city, then load real review rows from the API.
-        </p>
       </header>
 
 

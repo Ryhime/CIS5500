@@ -68,9 +68,6 @@ export default function Hotels() {
         <h1 className="page-title">
           {city ? `Hotels in ${city}` : "Hotels"}
         </h1>
-        <p className="page-lede">
-          Average guest ratings from your reviews data, sorted for each city.
-        </p>
       </header>
 
 

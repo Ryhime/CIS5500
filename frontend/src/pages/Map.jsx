@@ -54,11 +54,6 @@ export default function Map() {
         <h1 className="page-title">
           {cityName ? `${cityName}` : "City map"}
         </h1>
-        <p className="page-lede">
-          {cityName
-            ? `Showing the location of ${cityName}.`
-            : "Select a city from the home page to drop a pin and explore its location on the map."}
-        </p>
       </header>
 
       {cityName && <PageNavLinks cityName={cityName} />}

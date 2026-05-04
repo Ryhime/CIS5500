@@ -50,9 +50,6 @@ export default function Safety() {
         <h1 className="page-title">
           {cityName ? `Safety · ${cityName}` : "Safety"}
         </h1>
-        <p className="page-lede">
-          Safety and crime indices from your joined city dataset.
-        </p>
       </header>
 
 

@@ -122,10 +122,6 @@ export default function CityOverview() {
         <h1 className="page-title">
           {cityName ? cityName : "City overview"}
         </h1>
-        <p className="page-lede">
-          Snapshot from your database: population, safety signals, and a local
-          forecast when coordinates are available.
-        </p>
       </header>
 
       <nav className="page-nav" aria-label="Section">
