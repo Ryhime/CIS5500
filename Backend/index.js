@@ -164,7 +164,7 @@ app.get('/cities/:cityName/hotels/average_ratings', async (req, res) => {
         SELECT
           o.name,
           o.url,
-          AVG(NULLIF(BTRIM(r.overall_rating::text), '')::float) AS average_rating
+          AVG(NULLIF(r.overall_rating::text, '')::numeric) AS average_rating
         FROM offerings o
         JOIN reviews r ON r.offering_id = o.id
         WHERE LOWER(o.city) = LOWER($1)
@@ -188,12 +188,12 @@ app.get('/hotels/top-rated', async (req, res) => {
       `
         SELECT
           o.name AS name,
-          AVG(NULLIF(BTRIM(r.overall_rating::text), '')::float) AS rating
+          AVG(NULLIF(r.overall_rating::text, '')::numeric) AS rating
         FROM offerings o
         JOIN reviews r ON r.offering_id = o.id
         WHERE LOWER(o.city) = LOWER($1)
         GROUP BY o.name
-        HAVING AVG(NULLIF(BTRIM(r.overall_rating::text), '')::float) >= 4.0
+        HAVING AVG(NULLIF(r.overall_rating::text, '')::numeric) >= 4.0
         ORDER BY rating DESC NULLS LAST;
       `,
       [String(city)]
@@ -236,11 +236,11 @@ app.get('/hotels/overhyped', async (req, res) => {
         o.name AS name,
         o.city AS city,
         COUNT(*)::int AS review_count,
-        AVG(NULLIF(BTRIM(r.overall_rating::text), '')::float) AS avg_rating
+        AVG(NULLIF(r.overall_rating::text, '')::numeric) AS avg_rating
       FROM offerings o
       JOIN reviews r ON r.offering_id = o.id
       GROUP BY o.id, o.name, o.city
-      HAVING COUNT(*) >= 50 AND AVG(NULLIF(BTRIM(r.overall_rating::text), '')::float) < 3.0
+      HAVING COUNT(*) >= 50 AND AVG(NULLIF(r.overall_rating::text, '')::numeric) < 3.0
       ORDER BY review_count DESC, avg_rating ASC
       LIMIT 100;
     `);
@@ -258,7 +258,7 @@ app.get('/hotels/top-safe-rated', async (req, res) => {
         WITH hotel_ratings AS (
           SELECT
             r.offering_id,
-            AVG(NULLIF(BTRIM(r.overall_rating::text), '')::float) AS average_rating
+            AVG(NULLIF(r.overall_rating::text, '')::numeric) AS average_rating
           FROM reviews r
           GROUP BY r.offering_id
         )
@@ -288,11 +288,11 @@ app.get('/hotels/room-ratings', async (req, res) => {
       SELECT
         o.name AS name,
         o.city AS city,
-        AVG(NULLIF(BTRIM(r.rooms_rating::text), '')::float) AS rooms_rating
+        AVG(NULLIF(r.rooms_rating::text, '')::numeric) AS rooms_rating
       FROM offerings o
       JOIN reviews r ON r.offering_id = o.id
       GROUP BY o.id, o.name, o.city
-      HAVING AVG(NULLIF(BTRIM(r.rooms_rating::text), '')::float) > 3.0
+      HAVING AVG(NULLIF(r.rooms_rating::text, '')::numeric) > 3.0
       ORDER BY rooms_rating DESC NULLS LAST
       LIMIT 200;
     `);
@@ -315,7 +315,7 @@ app.get('/hotels/filtered', async (req, res) => {
       hotel_room_ratings AS (
         SELECT
           offering_id,
-          AVG(NULLIF(BTRIM(rooms_rating::text), '')::float) AS average_rooms_rating
+          AVG(NULLIF(rooms_rating::text, '')::numeric) AS average_rooms_rating
         FROM reviews
         GROUP BY offering_id
       )
@@ -355,7 +355,7 @@ app.get('/hotels/top-overall', async (req, res) => {
         hotel_ratings AS (
           SELECT
             offering_id,
-            AVG(NULLIF(BTRIM(overall_rating::text), '')::float) AS average_rating
+            AVG(NULLIF(overall_rating::text, '')::numeric) AS average_rating
           FROM reviews
           GROUP BY offering_id
         )
