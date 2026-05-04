@@ -58,7 +58,7 @@ describe("UI components", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText(/Plan with context/i)).toBeInTheDocument();
+    expect(screen.getByText(/Find your next city/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Search city" })).toBeInTheDocument();
     expect(screen.getByLabelText("City name")).toBeInTheDocument();
   });

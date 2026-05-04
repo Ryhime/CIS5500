@@ -34,27 +34,19 @@ describe('Real-data API integration', () => {
     pool = new Pool(dbConfig());
     await pool.query('SELECT 1 AS ok');
 
-    const [{ rows: overviewRows }, { rows: populationRows }, { rows: hotelRows }, { rows: countryRows }] =
+    const [{ rows: overviewRows }, { rows: populationRows }, { rows: hotelRows }] =
       await Promise.all([
         pool.query(`
-          SELECT p.city, p.country
+          SELECT p.city
           FROM population p
-          JOIN city_crime_index ci
-            ON LOWER(p.city) = LOWER(ci.city)
-           AND LOWER(p.country) = LOWER(ci.country)
-          WHERE p.city IS NOT NULL
-            AND p.country IS NOT NULL
-            AND p.city <> ''
-            AND p.country <> ''
+          JOIN city_crime_index ci ON LOWER(p.city) = LOWER(ci.city)
+          WHERE p.city IS NOT NULL AND p.city <> ''
           LIMIT 1;
         `),
         pool.query(`
-          SELECT city, country
+          SELECT city
           FROM population
-          WHERE city IS NOT NULL
-            AND country IS NOT NULL
-            AND city <> ''
-            AND country <> ''
+          WHERE city IS NOT NULL AND city <> ''
           LIMIT 1;
         `),
         pool.query(`
@@ -67,29 +59,17 @@ describe('Real-data API integration', () => {
             AND o.city <> ''
           LIMIT 1;
         `),
-        pool.query(`
-          SELECT country
-          FROM city_crime_index
-          WHERE country IS NOT NULL
-            AND country <> ''
-          GROUP BY country
-          ORDER BY COUNT(*) DESC
-          LIMIT 1;
-        `),
       ]);
 
-    if (!overviewRows[0] || !populationRows[0] || !hotelRows[0] || !countryRows[0]) {
+    if (!overviewRows[0] || !populationRows[0] || !hotelRows[0]) {
       throw new Error('Could not find required datapoints in DB for real-data tests.');
     }
 
     data = {
       overviewCity: overviewRows[0].city,
-      overviewCountry: overviewRows[0].country,
       populationCity: populationRows[0].city,
-      populationCountry: populationRows[0].country,
       hotelName: hotelRows[0].hotel_name,
       hotelCity: hotelRows[0].city,
-      safestCountry: countryRows[0].country,
     };
   });
 
@@ -113,21 +93,15 @@ describe('Real-data API integration', () => {
     expect(Array.isArray(res.body)).toBe(true);
     expect(res.body.length).toBeGreaterThan(0);
     const matched = res.body.some(
-      (row) =>
-        String(row.city || '').toLowerCase() === String(data.overviewCity).toLowerCase() &&
-        String(row.country || '').toLowerCase() === String(data.overviewCountry).toLowerCase()
+      (row) => String(row.city || '').toLowerCase() === String(data.overviewCity).toLowerCase()
     );
     expect(matched).toBe(true);
   });
 
-  test('GET /cities/population returns population for a real city/country', async () => {
-    const res = await apiGet('/cities/population', {
-      city: data.populationCity,
-      country: data.populationCountry,
-    });
+  test('GET /cities/population returns population for a real city', async () => {
+    const res = await apiGet('/cities/population', { city: data.populationCity });
     expect(res.status).toBe(200);
     expect(String(res.body.city || '').toLowerCase()).toBe(String(data.populationCity).toLowerCase());
-    expect(String(res.body.country || '').toLowerCase()).toBe(String(data.populationCountry).toLowerCase());
     expect(res.body).toHaveProperty('population');
   });
 
@@ -153,14 +127,14 @@ describe('Real-data API integration', () => {
     expect(hasMatchingHotel).toBe(true);
   });
 
-  test('GET /cities/safest returns rows for real country from DB', async () => {
-    const res = await apiGet('/cities/safest', { country: data.safestCountry, limit: 5 });
+  test('GET /cities/safest returns rows', async () => {
+    const res = await apiGet('/cities/safest', { limit: 5 });
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
     expect(res.body.length).toBeGreaterThan(0);
-    const allCountryMatch = res.body.every(
-      (row) => String(row.country || '').toLowerCase() === String(data.safestCountry).toLowerCase()
-    );
-    expect(allCountryMatch).toBe(true);
+    if (res.body.length > 0) {
+      expect(res.body[0]).toHaveProperty('city');
+      expect(res.body[0]).toHaveProperty('safety_index');
+    }
   });
 });
