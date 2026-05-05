@@ -11,7 +11,6 @@ describe("UI components", () => {
       <CityCard
         city={{
           city: "New York",
-          country: "United States",
           population: 8804190,
           safety_index: 52.1,
         }}
@@ -19,7 +18,6 @@ describe("UI components", () => {
     );
 
     expect(screen.getByText("New York")).toBeInTheDocument();
-    expect(screen.getByText("United States")).toBeInTheDocument();
     expect(screen.getByText("Population")).toBeInTheDocument();
     expect(screen.getByText("Safety index")).toBeInTheDocument();
     expect(screen.getByText("52.1")).toBeInTheDocument();
@@ -44,9 +42,28 @@ describe("UI components", () => {
     expect(screen.getByText(/Riverside Inn/)).toBeInTheDocument();
   });
 
+  test("HotelList shows listing website link when url is present", () => {
+    render(
+      <HotelList
+        hotels={[
+          {
+            name: "Hotel Beacon",
+            rating: 4.5,
+            url: "https://example.com/beacon",
+          },
+        ]}
+      />
+    );
+
+    expect(screen.getByRole("link", { name: /listing website/i })).toHaveAttribute(
+      "href",
+      "https://example.com/beacon"
+    );
+  });
+
   test("SafetyCard renders city and safety index", () => {
-    render(<SafetyCard data={{ city: "Boston", country: "United States", safety_index: 61 }} />);
-    expect(screen.getByText("Boston, United States")).toBeInTheDocument();
+    render(<SafetyCard data={{ city: "Boston", safety_index: 61 }} />);
+    expect(screen.getByText("Boston")).toBeInTheDocument();
     expect(screen.getByText("Safety index")).toBeInTheDocument();
     expect(screen.getByText("61")).toBeInTheDocument();
   });

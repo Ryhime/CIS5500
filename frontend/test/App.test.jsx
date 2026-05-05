@@ -2,6 +2,16 @@ import { render, screen } from "@testing-library/react";
 import App from "../src/App";
 
 describe("App routing smoke tests", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => [],
+      })
+    );
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     window.history.pushState({}, "", "/");
@@ -16,14 +26,10 @@ describe("App routing smoke tests", () => {
   test("renders map route", () => {
     window.history.pushState({}, "", "/map");
     render(<App />);
-    expect(screen.getByRole("heading", { name: /City map/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /City overview/i })).toBeInTheDocument();
   });
 
   test("renders cities route", () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => [],
-    }));
     window.history.pushState({}, "", "/cities");
     render(<App />);
     expect(screen.getByText("City overview")).toBeInTheDocument();
@@ -38,7 +44,7 @@ describe("App routing smoke tests", () => {
   test("renders safety route", () => {
     window.history.pushState({}, "", "/safety");
     render(<App />);
-    expect(screen.getByRole("heading", { name: "Safety" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /City overview/i })).toBeInTheDocument();
   });
 
   test("renders reviews route", () => {

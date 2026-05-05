@@ -3,9 +3,7 @@ export default function SafetyCard({ data }) {
 
   return (
     <div className="info-card-inner" style={{ padding: "1.15rem 1.35rem" }}>
-      <h2 className="info-card-title">
-        {data.city}, {data.country}
-      </h2>
+      <h2 className="info-card-title">{data.city}</h2>
       <div className="stat-grid" style={{ marginTop: "0.75rem" }}>
         {data.safety_index != null && (
           <div className="stat-pill">

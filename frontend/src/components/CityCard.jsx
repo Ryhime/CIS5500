@@ -4,7 +4,6 @@ export default function CityCard({ city }) {
   return (
     <div className="info-card-inner">
       <h2 className="info-card-title">{city.city}</h2>
-      <p className="info-card-muted">{city.country}</p>
       <div className="stat-grid">
         <div className="stat-pill">
           <strong>Population</strong>

@@ -19,7 +19,7 @@ describe("Reviews page", () => {
 
   test("shows guidance when no city query is present", () => {
     renderReviewsAt("/reviews");
-    expect(screen.getByText(/Search for a city from the home page/)).toBeInTheDocument();
+    expect(screen.getByText(/Open reviews from a city/i)).toBeInTheDocument();
   });
 
   test("loads hotels and renders reviews for selected hotel", async () => {

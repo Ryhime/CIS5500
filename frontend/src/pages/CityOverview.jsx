@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import CityCard from "../components/CityCard";
+import CityLeafletMap from "../components/CityLeafletMap";
 import PageNavLinks from "../components/PageNavLinks";
 
 /** Empty string = same origin in dev (Vite proxies API routes). */
@@ -16,6 +17,9 @@ export default function CityOverview() {
   const [forecast, setForecast] = useState([]);
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherError, setWeatherError] = useState(null);
+
+  const [mapHotels, setMapHotels] = useState([]);
+  const [mapHotelsLoading, setMapHotelsLoading] = useState(false);
 
   useEffect(() => {
     if (!cityName) return;
@@ -59,6 +63,32 @@ export default function CityOverview() {
       }
     })();
 
+    return () => {
+      cancelled = true;
+    };
+  }, [cityName]);
+
+  useEffect(() => {
+    if (!cityName) {
+      setMapHotels([]);
+      return;
+    }
+    let cancelled = false;
+    const hotelsUrl = `${API_BASE}/cities/${encodeURIComponent(cityName)}/hotels?geocode=1`;
+    (async () => {
+      setMapHotelsLoading(true);
+      try {
+        const res = await fetch(hotelsUrl);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const rows = await res.json();
+        if (cancelled) return;
+        setMapHotels(Array.isArray(rows) ? rows : []);
+      } catch {
+        if (!cancelled) setMapHotels([]);
+      } finally {
+        if (!cancelled) setMapHotelsLoading(false);
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -115,6 +145,38 @@ export default function CityOverview() {
     Number.isFinite(Number(city.latitude)) &&
     Number.isFinite(Number(city.longitude));
 
+  const hotelMarkersForMap = useMemo(
+    () =>
+      mapHotels.filter(
+        (h) =>
+          h.map_latitude != null &&
+          h.map_longitude != null &&
+          Number.isFinite(Number(h.map_latitude)) &&
+          Number.isFinite(Number(h.map_longitude))
+      ),
+    [mapHotels]
+  );
+
+  const mapCaption = useMemo(() => {
+    const n = mapHotels.length;
+    const geocoded = mapHotels.filter((h) => h.map_location_approximate === false).length;
+    const approx = mapHotels.filter((h) => h.map_location_approximate === true).length;
+    const parts = [
+      `Orange dot: city center · Blue pins: ${n} hotel${n === 1 ? "" : "s"}.`,
+    ];
+    if (geocoded > 0) {
+      parts.push(
+        ` ${geocoded} pin${geocoded === 1 ? "" : "s"} placed from street address (OpenStreetMap Nominatim).`
+      );
+    }
+    if (approx > 0) {
+      parts.push(
+        ` ${approx} fallback pin${approx === 1 ? "" : "s"} near the city center when geocoding did not return a match.`
+      );
+    }
+    return parts.join("");
+  }, [mapHotels]);
+
   return (
     <main className="page">
       <header className="page-head">
@@ -124,18 +186,12 @@ export default function CityOverview() {
         </h1>
       </header>
 
-      <nav className="page-nav" aria-label="Section">
-        <Link className="link-back" to="/">
-          Home
-        </Link>
-      </nav>
-
       {cityName && <PageNavLinks cityName={cityName} />}
 
       {!cityName && (
-        <div className="card card-muted">
+        <div className="card card-muted" style={{ marginTop: "1rem" }}>
           <p className="card-body">
-            Search for a city from the home page to view details.
+            Search for a city from the home page to view details, map, and local safety stats.
           </p>
         </div>
       )}
@@ -154,19 +210,31 @@ export default function CityOverview() {
       )}
       {city && (
         <>
-          <article className="card info-card" style={{ maxWidth: "100%" }}>
+          <article className="card info-card" style={{ maxWidth: "100%", marginTop: "1rem" }}>
             <CityCard city={city} />
           </article>
 
           {hasCoords && (
-            <p style={{ marginTop: "1.25rem" }}>
-              <Link
-                className="pill-link"
-                to={`/map?city=${encodeURIComponent(cityName)}`}
-              >
-                Open full map
-              </Link>
-            </p>
+            <section className="map-section overview-map" aria-label="City map" style={{ marginTop: "1.25rem" }}>
+              <h2 className="weather-title" style={{ marginBottom: "0.65rem" }}>
+                Map
+              </h2>
+              {mapHotelsLoading && (
+                <p className="status-line" role="status">
+                  Loading hotel pins (geocoding uses ~1 second per unique address the first time)…
+                </p>
+              )}
+              <CityLeafletMap
+                lat={Number(city.latitude)}
+                lng={Number(city.longitude)}
+                label={city?.city ? `${city.city}` : cityName}
+                hotelMarkers={hotelMarkersForMap}
+              />
+              <p className="map-meta">{mapCaption}</p>
+              <p className="map-meta" style={{ marginTop: "0.25rem" }}>
+                {Number(city.latitude).toFixed(4)}°, {Number(city.longitude).toFixed(4)}°
+              </p>
+            </section>
           )}
 
           <section className="weather-section" aria-label="Weather forecast">

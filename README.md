@@ -7,9 +7,9 @@ centralizes this process into a single web application where users can search an
 city and view comprehensive travel information in one place.
 
 ## Features
-- **City Search** — Search directly by city name or browse via a Country → City cascading dropdown
+- **City Search** — Browse supported cities via dropdown
 - **City Overview** — View population, location, safety index, crime index, and weather forecast
-- **Hotel Exploration** — Browse hotels with ratings, contact info, and metadata
+- **Hotel Exploration** — Search/filter hotels with ratings and metadata
 - **Safety Information** — View crime and safety metrics for any city
 - **Weather Integration** — Multi-day forecasts via Open-Meteo API
 - **Database-Backed Queries** — Backend routes powered by SQL with filtering, joins, and aggregations
@@ -24,14 +24,40 @@ city and view comprehensive travel information in one place.
 | Reviews / Details | Hotel-level review data |
 
 ## Database Schema
-**population**(`country`, `city`, population, latitude, longitude)
+This project uses the following tables (PostgreSQL).
 
-**offerings**(hotel_class, url, type, id, `name`, `state`, `street_address`, `postal_code`, `city`)
+**`city_crime_index`**
+- `city` (PK, varchar(50))
+- `crime_index` (double precision)
 
-**city_crime_index**(rank, `city`, `country`, crime_index, safety_index)
+**`population`**
+- `city` (PK, varchar(100), FK → `city_crime_index.city`)
+- `population` (numeric(10, 1))
+- `latitude` (numeric(10, 6))
+- `longitude` (numeric(10, 6))
 
-**reviews**(title, text, author, date_stayed, offering_id, num_helpful_votes, date, `id`, service_rating, cleanliness_rating, overall_rating,
-value_rating, location_rating, sleep_quality_rating, rooms_rating)
+**`offerings`**
+- `id` (PK, integer)
+- `name` (varchar(255))
+- `city` (varchar(100), FK → `population.city`)
+- `street_address` (varchar(255))
+- `type` (varchar(50))
+- `hotel_class` (numeric(2, 1))
+- `url` (varchar(500))
+
+**`reviews`**
+- `id` (PK, bigint)
+- `offering_id` (integer, FK → `offerings.id`)
+- `title` (varchar(255))
+- `text` (varchar(5000))
+- `author` (varchar(100))
+- `date_stayed` (varchar(50))
+- `num_helpful_votes` (integer)
+- `date` (varchar(50))
+- ratings: `overall_rating`, `cleanliness_rating`, `service_rating`, `value_rating`, `location_rating`, `sleep_quality_rating`, `rooms_rating` (numeric(2, 1))
+
+**Derived metrics used in queries**
+- **Safety index** is computed as \(100 - crime_index\) (not stored as a column).
 
 ## Data Sources
 - World Cities Population Dataset
@@ -79,5 +105,4 @@ Run all tests from this section.
 
 
 ## Todo
-- Add Foreign Keys and Primary Keys to the database schema
-- Ensure all cities can be joined in the database
+- Add performance indexes for common joins/aggregations (e.g., `reviews(offering_id)`, `offerings(city)`).

@@ -15,6 +15,126 @@ function parsePositiveInt(value, fallback) {
   return Math.floor(n);
 }
 
+const GEOCODE_USER_AGENT = 'CIS5500-TravelApp/1.0 (educational project)';
+
+/** address+city -> { lat, lng } | null (null means "tried and failed", do not re-query) */
+const geocodeCache = new Map();
+let geocodeLastRequestAt = 0;
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * OpenStreetMap Nominatim: ~1 request/sec, identify with User-Agent.
+ * https://operations.osmfoundation.org/policies/nominatim/
+ */
+async function nominatimGeocode(street, city) {
+  const s = String(street || '').trim();
+  const c = String(city || '').trim();
+  if (!s || !c) return null;
+  const key = `${s.toLowerCase()}|${c.toLowerCase()}`;
+  if (geocodeCache.has(key)) return geocodeCache.get(key);
+
+  const elapsed = Date.now() - geocodeLastRequestAt;
+  if (elapsed < 1100) await sleep(1100 - elapsed);
+  geocodeLastRequestAt = Date.now();
+
+  const q = `${s}, ${c}, United States`;
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`;
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': GEOCODE_USER_AGENT },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) {
+      geocodeCache.set(key, null);
+      return null;
+    }
+    const lat = Number(data[0].lat);
+    const lon = Number(data[0].lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      geocodeCache.set(key, null);
+      return null;
+    }
+    const coords = { lat, lng: lon };
+    geocodeCache.set(key, coords);
+    return coords;
+  } catch (err) {
+    console.warn('Nominatim geocode failed:', err?.message || err);
+    geocodeCache.set(key, null);
+    return null;
+  }
+}
+
+function stripInternalCityCoords(row) {
+  const { city_latitude, city_longitude, ...rest } = row;
+  return {
+    rest,
+    cityLat: city_latitude != null ? Number(city_latitude) : NaN,
+    cityLng: city_longitude != null ? Number(city_longitude) : NaN,
+  };
+}
+
+/** Fallback ring around city centroid when geocoding is off or fails */
+function approximateMapPin(rest, index, cityLat, cityLng) {
+  const idNum = rest.id != null ? Number(rest.id) : index;
+  const angle = ((idNum * 9301 + 49297) % 233280) * ((2 * Math.PI) / 233280);
+  const radius = 0.0025 + (Math.abs(idNum) % 47) * 0.00011;
+  return {
+    map_latitude: cityLat + radius * Math.cos(angle),
+    map_longitude: cityLng + radius * Math.sin(angle) * 1.12,
+    map_location_approximate: true,
+  };
+}
+
+/** Fast path: no external API (e.g. hotel picker on Reviews). */
+function attachHotelMapPins(rows) {
+  return rows.map((row, index) => {
+    const { rest, cityLat, cityLng } = stripInternalCityCoords(row);
+    if (!Number.isFinite(cityLat) || !Number.isFinite(cityLng)) {
+      return {
+        ...rest,
+        map_latitude: null,
+        map_longitude: null,
+        map_location_approximate: null,
+      };
+    }
+    return { ...rest, ...approximateMapPin(rest, index, cityLat, cityLng) };
+  });
+}
+
+/** Geocode street_address + city via Nominatim; fall back to approximate ring. */
+async function attachHotelMapPinsGeocoded(rows) {
+  const out = [];
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const { rest, cityLat, cityLng } = stripInternalCityCoords(row);
+    let map_latitude = null;
+    let map_longitude = null;
+    let map_location_approximate = null;
+
+    const street = rest.street_address && String(rest.street_address).trim();
+    if (street && rest.city) {
+      const g = await nominatimGeocode(street, rest.city);
+      if (g) {
+        map_latitude = g.lat;
+        map_longitude = g.lng;
+        map_location_approximate = false;
+      }
+    }
+    if (map_latitude == null && Number.isFinite(cityLat) && Number.isFinite(cityLng)) {
+      const a = approximateMapPin(rest, i, cityLat, cityLng);
+      map_latitude = a.map_latitude;
+      map_longitude = a.map_longitude;
+      map_location_approximate = true;
+    }
+    out.push({ ...rest, map_latitude, map_longitude, map_location_approximate });
+  }
+  return out;
+}
+
 let pool;
 function getPool() {
   if (pool) return pool;
@@ -25,6 +145,10 @@ function getPool() {
     password: "cis5550databaseworldtravel",
     ssl: { rejectUnauthorized: false },
     database: "postgres"
+  });
+  // Prevent transient network/TLS issues from crashing the server.
+  pool.on('error', (err) => {
+    console.error('Unexpected PG pool error', err);
   });
   return pool;
 }
@@ -69,10 +193,9 @@ app.get('/cities/population', async (req, res) => {
 
     const result = await getPool().query(
       `
-        SELECT city, SUM(population) AS population
+        SELECT city, population
         FROM population
         WHERE LOWER(city) = LOWER($1)
-        GROUP BY city;
       `,
       [String(city)]
     );
@@ -98,6 +221,118 @@ app.get('/cities/most-dangerous', async (req, res) => {
       `,
       [limit]
     );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/cities/search', async (req, res) => {
+  try {
+    const q = (req.query.q ?? '').toString().trim();
+    const minPopulation = Number(req.query.min_population);
+    const maxPopulation = Number(req.query.max_population);
+    const minSafety = Number(req.query.min_safety);
+    const maxCrime = Number(req.query.max_crime);
+    const minHotelCount = Number(req.query.min_hotels);
+    const minAvgHotelRating = Number(req.query.min_avg_hotel_rating);
+    const limit = Math.min(parsePositiveInt(req.query.limit, 50), 200);
+    const offset = Math.max(0, parsePositiveInt(req.query.offset, 0));
+
+    const sortRaw = (req.query.sort ?? 'safety_desc').toString();
+    const sort =
+      sortRaw === 'population_desc' ? 'population_desc' :
+      sortRaw === 'crime_asc' ? 'crime_asc' :
+      sortRaw === 'hotels_desc' ? 'hotels_desc' :
+      sortRaw === 'avg_rating_desc' ? 'avg_rating_desc' :
+      'safety_desc';
+
+    const params = [q];
+    let idx = 2;
+    const where = [];
+    where.push(`($1 = '' OR LOWER(p.city) LIKE '%' || LOWER($1) || '%')`);
+
+    if (Number.isFinite(minPopulation)) { params.push(minPopulation); where.push(`p.population >= $${idx++}`); }
+    if (Number.isFinite(maxPopulation)) { params.push(maxPopulation); where.push(`p.population <= $${idx++}`); }
+    if (Number.isFinite(minSafety)) { params.push(minSafety); where.push(`(100 - ci.crime_index) >= $${idx++}`); }
+    if (Number.isFinite(maxCrime)) { params.push(maxCrime); where.push(`ci.crime_index <= $${idx++}`); }
+
+    if (Number.isFinite(minHotelCount)) { params.push(minHotelCount); where.push(`COALESCE(h.hotel_count, 0) >= $${idx++}`); }
+    if (Number.isFinite(minAvgHotelRating)) { params.push(minAvgHotelRating); where.push(`h.avg_hotel_rating >= $${idx++}`); }
+
+    const orderBy =
+      sort === 'population_desc' ? 'p.population DESC NULLS LAST, p.city ASC' :
+      sort === 'crime_asc' ? 'ci.crime_index ASC NULLS LAST, p.city ASC' :
+      sort === 'hotels_desc' ? 'COALESCE(h.hotel_count, 0) DESC NULLS LAST, p.city ASC' :
+      sort === 'avg_rating_desc' ? 'h.avg_hotel_rating DESC NULLS LAST, p.city ASC' :
+      '(100 - ci.crime_index) DESC NULLS LAST, p.city ASC';
+
+    const result = await getPool().query(
+      `
+        WITH hotel_ratings AS (
+          SELECT offering_id, AVG(overall_rating) AS avg_overall
+          FROM reviews
+          GROUP BY offering_id
+        ),
+        hotel_by_city AS (
+          SELECT
+            o.city,
+            COUNT(*)::int AS hotel_count,
+            AVG(hr.avg_overall) AS avg_hotel_rating
+          FROM offerings o
+          LEFT JOIN hotel_ratings hr ON hr.offering_id = o.id
+          GROUP BY o.city
+        )
+        SELECT
+          p.city,
+          p.population,
+          p.latitude,
+          p.longitude,
+          ci.crime_index,
+          (100 - ci.crime_index) AS safety_index,
+          COALESCE(h.hotel_count, 0) AS hotel_count,
+          h.avg_hotel_rating
+        FROM population p
+        JOIN city_crime_index ci ON ci.city = p.city
+        LEFT JOIN hotel_by_city h ON h.city = p.city
+        WHERE ${where.join(' AND ')}
+        ORDER BY ${orderBy}
+        LIMIT $${idx++}
+        OFFSET $${idx++};
+      `,
+      [...params, limit, offset]
+    );
+    // total count header (for UI "showing X of Y")
+    try {
+      const countResult = await getPool().query(
+        `
+          WITH hotel_ratings AS (
+            SELECT offering_id, AVG(overall_rating) AS avg_overall
+            FROM reviews
+            GROUP BY offering_id
+          ),
+          hotel_by_city AS (
+            SELECT
+              o.city,
+              COUNT(*)::int AS hotel_count,
+              AVG(hr.avg_overall) AS avg_hotel_rating
+            FROM offerings o
+            LEFT JOIN hotel_ratings hr ON hr.offering_id = o.id
+            GROUP BY o.city
+          )
+          SELECT COUNT(*)::bigint AS total_count
+          FROM population p
+          JOIN city_crime_index ci ON ci.city = p.city
+          LEFT JOIN hotel_by_city h ON h.city = p.city
+          WHERE ${where.join(' AND ')};
+        `,
+        params
+      );
+      const totalCount = countResult.rows?.[0]?.total_count ?? null;
+      if (totalCount != null) res.set('X-Total-Count', String(totalCount));
+    } catch {
+      // ignore count failures; still return rows
+    }
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -139,18 +374,36 @@ app.get('/cities/:cityName/hotels', async (req, res) => {
     const result = await getPool().query(
       `
         SELECT
-          name,
-          city,
-          street_address,
-          type,
-          hotel_class,
-          url
-        FROM offerings
-        WHERE LOWER(city) = LOWER($1)
+          o.id,
+          o.name,
+          o.city,
+          o.street_address,
+          o.type,
+          o.hotel_class,
+          o.url,
+          (
+            SELECT p.latitude
+            FROM population p
+            WHERE LOWER(TRIM(p.city)) = LOWER(TRIM(o.city))
+            LIMIT 1
+          ) AS city_latitude,
+          (
+            SELECT p.longitude
+            FROM population p
+            WHERE LOWER(TRIM(p.city)) = LOWER(TRIM(o.city))
+            LIMIT 1
+          ) AS city_longitude
+        FROM offerings o
+        WHERE LOWER(o.city) = LOWER($1)
+        ORDER BY o.name ASC
       `,
       [cityName]
     );
-    res.json(result.rows);
+    const wantGeocode = String(req.query.geocode || '') === '1';
+    const payload = wantGeocode
+      ? await attachHotelMapPinsGeocoded(result.rows)
+      : attachHotelMapPins(result.rows);
+    res.json(payload);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -162,13 +415,18 @@ app.get('/cities/:cityName/hotels/average_ratings', async (req, res) => {
     const result = await getPool().query(
       `
         SELECT
+          o.id,
           o.name,
+          o.city,
+          o.street_address,
+          o.type,
+          o.hotel_class,
           o.url,
-          AVG(NULLIF(r.overall_rating::text, '')::numeric) AS average_rating
+          AVG(r.overall_rating) AS average_rating
         FROM offerings o
         JOIN reviews r ON r.offering_id = o.id
         WHERE LOWER(o.city) = LOWER($1)
-        GROUP BY o.id, o.name, o.url
+        GROUP BY o.id, o.name, o.city, o.street_address, o.type, o.hotel_class, o.url
         ORDER BY average_rating DESC NULLS LAST, o.name
       `,
       [cityName]
@@ -188,12 +446,12 @@ app.get('/hotels/top-rated', async (req, res) => {
       `
         SELECT
           o.name AS name,
-          AVG(NULLIF(r.overall_rating::text, '')::numeric) AS rating
+          ROUND(AVG(r.overall_rating)::numeric, 2) AS rating
         FROM offerings o
         JOIN reviews r ON r.offering_id = o.id
         WHERE LOWER(o.city) = LOWER($1)
-        GROUP BY o.name
-        HAVING AVG(NULLIF(r.overall_rating::text, '')::numeric) >= 4.0
+        GROUP BY o.id, o.name
+        HAVING AVG(r.overall_rating) >= 4.0
         ORDER BY rating DESC NULLS LAST;
       `,
       [String(city)]
@@ -235,12 +493,12 @@ app.get('/hotels/overhyped', async (req, res) => {
       SELECT
         o.name AS name,
         o.city AS city,
-        COUNT(*)::int AS review_count,
-        AVG(NULLIF(r.overall_rating::text, '')::numeric) AS avg_rating
+        COUNT(r.id)::int AS review_count,
+        ROUND(AVG(r.overall_rating)::numeric, 2) AS avg_rating
       FROM offerings o
       JOIN reviews r ON r.offering_id = o.id
       GROUP BY o.id, o.name, o.city
-      HAVING COUNT(*) >= 50 AND AVG(NULLIF(r.overall_rating::text, '')::numeric) < 3.0
+      HAVING COUNT(r.id) > 50 AND AVG(r.overall_rating) < 3.0
       ORDER BY review_count DESC, avg_rating ASC
       LIMIT 100;
     `);
@@ -258,7 +516,7 @@ app.get('/hotels/top-safe-rated', async (req, res) => {
         WITH hotel_ratings AS (
           SELECT
             r.offering_id,
-            AVG(NULLIF(r.overall_rating::text, '')::numeric) AS average_rating
+            AVG(r.overall_rating) AS average_rating
           FROM reviews r
           GROUP BY r.offering_id
         )
@@ -288,11 +546,12 @@ app.get('/hotels/room-ratings', async (req, res) => {
       SELECT
         o.name AS name,
         o.city AS city,
-        AVG(NULLIF(r.rooms_rating::text, '')::numeric) AS rooms_rating
+        ROUND(AVG(r.rooms_rating)::numeric, 2) AS rooms_rating
       FROM offerings o
       JOIN reviews r ON r.offering_id = o.id
+      WHERE r.rooms_rating IS NOT NULL
       GROUP BY o.id, o.name, o.city
-      HAVING AVG(NULLIF(r.rooms_rating::text, '')::numeric) > 3.0
+      HAVING AVG(r.rooms_rating) > 3.0
       ORDER BY rooms_rating DESC NULLS LAST
       LIMIT 200;
     `);
@@ -308,14 +567,14 @@ app.get('/hotels/filtered', async (req, res) => {
       WITH city_stats AS (
         SELECT
           LOWER(city) AS city_key,
-          SUM(population)::bigint AS city_population
+          ROUND(SUM(population))::bigint AS city_population
         FROM population
         GROUP BY LOWER(city)
       ),
       hotel_room_ratings AS (
         SELECT
           offering_id,
-          AVG(NULLIF(rooms_rating::text, '')::numeric) AS average_rooms_rating
+          AVG(rooms_rating) AS average_rooms_rating
         FROM reviews
         GROUP BY offering_id
       )
@@ -348,14 +607,14 @@ app.get('/hotels/top-overall', async (req, res) => {
         WITH city_stats AS (
           SELECT
             LOWER(city) AS city_key,
-            SUM(population)::bigint AS city_population
+            ROUND(SUM(population))::bigint AS city_population
           FROM population
           GROUP BY LOWER(city)
         ),
         hotel_ratings AS (
           SELECT
             offering_id,
-            AVG(NULLIF(overall_rating::text, '')::numeric) AS average_rating
+            AVG(overall_rating) AS average_rating
           FROM reviews
           GROUP BY offering_id
         )
@@ -374,6 +633,161 @@ app.get('/hotels/top-overall', async (req, res) => {
         LIMIT $1;
       `,
       [limit]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/hotels/search', async (req, res) => {
+  try {
+    const q = (req.query.q ?? '').toString().trim();
+    const city = (req.query.city ?? '').toString().trim();
+    const citiesRaw = (req.query.cities ?? '').toString().trim();
+    const cities = citiesRaw
+      ? citiesRaw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+      : [];
+    const minOverall = Number(req.query.min_overall);
+    const minRooms = Number(req.query.min_rooms);
+    const minSafety = Number(req.query.min_safety);
+    const minPopulation = Number(req.query.min_population);
+    const minReviews = Number(req.query.min_reviews);
+    const maxOverall = Number(req.query.max_overall);
+    const maxRooms = Number(req.query.max_rooms);
+    const maxSafety = Number(req.query.max_safety);
+    const maxPopulation = Number(req.query.max_population);
+    const maxReviews = Number(req.query.max_reviews);
+    const minCleanliness = Number(req.query.min_cleanliness);
+    const maxCleanliness = Number(req.query.max_cleanliness);
+    const minService = Number(req.query.min_service);
+    const maxService = Number(req.query.max_service);
+    const minValue = Number(req.query.min_value);
+    const maxValue = Number(req.query.max_value);
+    const minLocation = Number(req.query.min_location);
+    const maxLocation = Number(req.query.max_location);
+    const minSleep = Number(req.query.min_sleep);
+    const maxSleep = Number(req.query.max_sleep);
+    const limit = Math.min(parsePositiveInt(req.query.limit, 50), 200);
+    const offset = Math.max(0, parsePositiveInt(req.query.offset, 0));
+
+    const sortRaw = (req.query.sort ?? 'overall_desc').toString();
+    const sort =
+      sortRaw === 'rooms_desc' ? 'rooms_desc' :
+      sortRaw === 'safety_desc' ? 'safety_desc' :
+      sortRaw === 'reviews_desc' ? 'reviews_desc' :
+      sortRaw === 'name_asc' ? 'name_asc' :
+      sortRaw === 'cleanliness_desc' ? 'cleanliness_desc' :
+      sortRaw === 'service_desc' ? 'service_desc' :
+      sortRaw === 'value_desc' ? 'value_desc' :
+      sortRaw === 'location_desc' ? 'location_desc' :
+      sortRaw === 'sleep_desc' ? 'sleep_desc' :
+      'overall_desc';
+
+    const params = [q, city];
+    let idx = params.length + 1;
+
+    const where = [];
+    // text search on name/address
+    where.push(`($1 = '' OR LOWER(o.name) LIKE '%' || LOWER($1) || '%' OR LOWER(COALESCE(o.street_address, '')) LIKE '%' || LOWER($1) || '%')`);
+    // optional city filter
+    where.push(`($2 = '' OR LOWER(o.city) = LOWER($2))`);
+    if (cities.length > 0) {
+      params.push(cities);
+      where.push(`LOWER(o.city) = ANY($${idx++}::text[])`);
+    }
+
+    if (Number.isFinite(minOverall)) { params.push(minOverall); where.push(`hs.avg_overall >= $${idx++}`); }
+    if (Number.isFinite(minRooms)) { params.push(minRooms); where.push(`hs.avg_rooms >= $${idx++}`); }
+    if (Number.isFinite(minSafety)) { params.push(minSafety); where.push(`(100 - ci.crime_index) >= $${idx++}`); }
+    if (Number.isFinite(minPopulation)) { params.push(minPopulation); where.push(`cs.city_population >= $${idx++}`); }
+    if (Number.isFinite(minReviews)) { params.push(minReviews); where.push(`hs.review_count >= $${idx++}`); }
+    if (Number.isFinite(maxOverall)) { params.push(maxOverall); where.push(`hs.avg_overall <= $${idx++}`); }
+    if (Number.isFinite(maxRooms)) { params.push(maxRooms); where.push(`hs.avg_rooms <= $${idx++}`); }
+    if (Number.isFinite(maxSafety)) { params.push(maxSafety); where.push(`(100 - ci.crime_index) <= $${idx++}`); }
+    if (Number.isFinite(maxPopulation)) { params.push(maxPopulation); where.push(`cs.city_population <= $${idx++}`); }
+    if (Number.isFinite(maxReviews)) { params.push(maxReviews); where.push(`hs.review_count <= $${idx++}`); }
+    if (Number.isFinite(minCleanliness)) { params.push(minCleanliness); where.push(`hs.avg_cleanliness >= $${idx++}`); }
+    if (Number.isFinite(maxCleanliness)) { params.push(maxCleanliness); where.push(`hs.avg_cleanliness <= $${idx++}`); }
+    if (Number.isFinite(minService)) { params.push(minService); where.push(`hs.avg_service >= $${idx++}`); }
+    if (Number.isFinite(maxService)) { params.push(maxService); where.push(`hs.avg_service <= $${idx++}`); }
+    if (Number.isFinite(minValue)) { params.push(minValue); where.push(`hs.avg_value >= $${idx++}`); }
+    if (Number.isFinite(maxValue)) { params.push(maxValue); where.push(`hs.avg_value <= $${idx++}`); }
+    if (Number.isFinite(minLocation)) { params.push(minLocation); where.push(`hs.avg_location >= $${idx++}`); }
+    if (Number.isFinite(maxLocation)) { params.push(maxLocation); where.push(`hs.avg_location <= $${idx++}`); }
+    if (Number.isFinite(minSleep)) { params.push(minSleep); where.push(`hs.avg_sleep >= $${idx++}`); }
+    if (Number.isFinite(maxSleep)) { params.push(maxSleep); where.push(`hs.avg_sleep <= $${idx++}`); }
+
+    // Non-overall sorts: do not tie-break on avg_overall — that made e.g. sleep_desc look like an overall sort
+    // when many rows shared the same NULL/missing dimension average.
+    const orderBy =
+      sort === 'rooms_desc' ? '(hs.avg_rooms IS NULL) ASC, hs.avg_rooms DESC NULLS LAST, o.city ASC, o.name ASC' :
+      sort === 'safety_desc' ? '(100 - ci.crime_index) DESC NULLS LAST, o.city ASC, o.name ASC' :
+      sort === 'reviews_desc' ? '(hs.review_count IS NULL) ASC, hs.review_count DESC NULLS LAST, o.city ASC, o.name ASC' :
+      sort === 'cleanliness_desc' ? '(hs.avg_cleanliness IS NULL) ASC, hs.avg_cleanliness DESC NULLS LAST, o.city ASC, o.name ASC' :
+      sort === 'service_desc' ? '(hs.avg_service IS NULL) ASC, hs.avg_service DESC NULLS LAST, o.city ASC, o.name ASC' :
+      sort === 'value_desc' ? '(hs.avg_value IS NULL) ASC, hs.avg_value DESC NULLS LAST, o.city ASC, o.name ASC' :
+      sort === 'location_desc' ? '(hs.avg_location IS NULL) ASC, hs.avg_location DESC NULLS LAST, o.city ASC, o.name ASC' :
+      sort === 'sleep_desc' ? '(hs.avg_sleep IS NULL) ASC, hs.avg_sleep DESC NULLS LAST, o.city ASC, o.name ASC' :
+      sort === 'name_asc' ? 'o.city ASC, o.name ASC' :
+      '(hs.avg_overall IS NULL) ASC, hs.avg_overall DESC NULLS LAST, o.city ASC, o.name ASC';
+
+    const baseSql = `
+      WITH city_stats AS (
+        SELECT city, ROUND(SUM(population))::bigint AS city_population
+        FROM population
+        GROUP BY city
+      ),
+      hotel_stats AS (
+        SELECT
+          offering_id,
+          COUNT(*)::int AS review_count,
+          AVG(overall_rating) AS avg_overall,
+          AVG(rooms_rating) AS avg_rooms,
+          AVG(cleanliness_rating) AS avg_cleanliness,
+          AVG(service_rating) AS avg_service,
+          AVG(value_rating) AS avg_value,
+          AVG(location_rating) AS avg_location,
+          AVG(sleep_quality_rating) AS avg_sleep
+        FROM reviews
+        GROUP BY offering_id
+      )
+      SELECT
+        o.id,
+        o.name,
+        o.city,
+        o.street_address,
+        o.type,
+        o.hotel_class,
+        o.url,
+        hs.review_count,
+        hs.avg_overall,
+        hs.avg_rooms,
+        hs.avg_cleanliness,
+        hs.avg_service,
+        hs.avg_value,
+        hs.avg_location,
+        hs.avg_sleep,
+        ci.crime_index,
+        (100 - ci.crime_index) AS safety_index,
+        cs.city_population
+      FROM offerings o
+      LEFT JOIN hotel_stats hs ON hs.offering_id = o.id
+      LEFT JOIN city_crime_index ci ON ci.city = o.city
+      LEFT JOIN city_stats cs ON cs.city = o.city
+      WHERE ${where.join(' AND ')}
+    `;
+
+    const countResult = await getPool().query(
+      `SELECT COUNT(*)::bigint AS total_count FROM (${baseSql}) t`,
+      params
+    );
+    const totalCount = countResult.rows?.[0]?.total_count ?? null;
+    if (totalCount != null) res.set('X-Total-Count', String(totalCount));
+
+    const result = await getPool().query(
+      `${baseSql} ORDER BY ${orderBy} LIMIT ${limit} OFFSET ${offset};`,
+      params
     );
     res.json(result.rows);
   } catch (err) {
