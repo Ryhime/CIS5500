@@ -280,118 +280,6 @@ app.get('/cities/most-dangerous', async (req, res) => {
   }
 });
 
-app.get('/cities/search', async (req, res) => {
-  try {
-    const q = (req.query.q ?? '').toString().trim();
-    const minPopulation = Number(req.query.min_population);
-    const maxPopulation = Number(req.query.max_population);
-    const minSafety = Number(req.query.min_safety);
-    const maxCrime = Number(req.query.max_crime);
-    const minHotelCount = Number(req.query.min_hotels);
-    const minAvgHotelRating = Number(req.query.min_avg_hotel_rating);
-    const limit = Math.min(parsePositiveInt(req.query.limit, 50), 200);
-    const offset = Math.max(0, parsePositiveInt(req.query.offset, 0));
-
-    const sortRaw = (req.query.sort ?? 'safety_desc').toString();
-    const sort =
-      sortRaw === 'population_desc' ? 'population_desc' :
-      sortRaw === 'crime_asc' ? 'crime_asc' :
-      sortRaw === 'hotels_desc' ? 'hotels_desc' :
-      sortRaw === 'avg_rating_desc' ? 'avg_rating_desc' :
-      'safety_desc';
-
-    const params = [q];
-    let idx = 2;
-    const where = [];
-    where.push(`($1 = '' OR LOWER(p.city) LIKE '%' || LOWER($1) || '%')`);
-
-    if (Number.isFinite(minPopulation)) { params.push(minPopulation); where.push(`p.population >= $${idx++}`); }
-    if (Number.isFinite(maxPopulation)) { params.push(maxPopulation); where.push(`p.population <= $${idx++}`); }
-    if (Number.isFinite(minSafety)) { params.push(minSafety); where.push(`(100 - ci.crime_index) >= $${idx++}`); }
-    if (Number.isFinite(maxCrime)) { params.push(maxCrime); where.push(`ci.crime_index <= $${idx++}`); }
-
-    if (Number.isFinite(minHotelCount)) { params.push(minHotelCount); where.push(`COALESCE(h.hotel_count, 0) >= $${idx++}`); }
-    if (Number.isFinite(minAvgHotelRating)) { params.push(minAvgHotelRating); where.push(`h.avg_hotel_rating >= $${idx++}`); }
-
-    const orderBy =
-      sort === 'population_desc' ? 'p.population DESC NULLS LAST, p.city ASC' :
-      sort === 'crime_asc' ? 'ci.crime_index ASC NULLS LAST, p.city ASC' :
-      sort === 'hotels_desc' ? 'COALESCE(h.hotel_count, 0) DESC NULLS LAST, p.city ASC' :
-      sort === 'avg_rating_desc' ? 'h.avg_hotel_rating DESC NULLS LAST, p.city ASC' :
-      '(100 - ci.crime_index) DESC NULLS LAST, p.city ASC';
-
-    const result = await getPool().query(
-      `
-        WITH hotel_ratings AS (
-          SELECT offering_id, AVG(overall_rating) AS avg_overall
-          FROM reviews
-          GROUP BY offering_id
-        ),
-        hotel_by_city AS (
-          SELECT
-            o.city,
-            COUNT(*)::int AS hotel_count,
-            AVG(hr.avg_overall) AS avg_hotel_rating
-          FROM offerings o
-          LEFT JOIN hotel_ratings hr ON hr.offering_id = o.id
-          GROUP BY o.city
-        )
-        SELECT
-          p.city,
-          p.population,
-          p.latitude,
-          p.longitude,
-          ci.crime_index,
-          (100 - ci.crime_index) AS safety_index,
-          COALESCE(h.hotel_count, 0) AS hotel_count,
-          h.avg_hotel_rating
-        FROM population p
-        JOIN city_crime_index ci ON ci.city = p.city
-        LEFT JOIN hotel_by_city h ON h.city = p.city
-        WHERE ${where.join(' AND ')}
-        ORDER BY ${orderBy}
-        LIMIT $${idx++}
-        OFFSET $${idx++};
-      `,
-      [...params, limit, offset]
-    );
-    // total count header (for UI "showing X of Y")
-    try {
-      const countResult = await getPool().query(
-        `
-          WITH hotel_ratings AS (
-            SELECT offering_id, AVG(overall_rating) AS avg_overall
-            FROM reviews
-            GROUP BY offering_id
-          ),
-          hotel_by_city AS (
-            SELECT
-              o.city,
-              COUNT(*)::int AS hotel_count,
-              AVG(hr.avg_overall) AS avg_hotel_rating
-            FROM offerings o
-            LEFT JOIN hotel_ratings hr ON hr.offering_id = o.id
-            GROUP BY o.city
-          )
-          SELECT COUNT(*)::bigint AS total_count
-          FROM population p
-          JOIN city_crime_index ci ON ci.city = p.city
-          LEFT JOIN hotel_by_city h ON h.city = p.city
-          WHERE ${where.join(' AND ')};
-        `,
-        params
-      );
-      const totalCount = countResult.rows?.[0]?.total_count ?? null;
-      if (totalCount != null) res.set('X-Total-Count', String(totalCount));
-    } catch {
-      // ignore count failures; still return rows
-    }
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 app.get('/cities/:cityName', async (req, res) => {
   try {
     const cityName = decodeURIComponent(req.params.cityName);
@@ -462,34 +350,6 @@ app.get('/cities/:cityName/hotels', async (req, res) => {
   }
 });
 
-app.get('/cities/:cityName/hotels/average_ratings', async (req, res) => {
-  try {
-    const cityName = decodeURIComponent(req.params.cityName);
-    const result = await getPool().query(
-      `
-        SELECT
-          o.id,
-          o.name,
-          o.city,
-          o.street_address,
-          o.type,
-          o.hotel_class,
-          o.url,
-          AVG(r.overall_rating) AS average_rating
-        FROM offerings o
-        JOIN reviews r ON r.offering_id = o.id
-        WHERE LOWER(o.city) = LOWER($1)
-        GROUP BY o.id, o.name, o.city, o.street_address, o.type, o.hotel_class, o.url
-        ORDER BY average_rating DESC NULLS LAST, o.name
-      `,
-      [cityName]
-    );
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 app.get('/cities/:cityName/hotels/standouts', async (req, res) => {
   try {
     const cityName = decodeURIComponent(req.params.cityName);
@@ -498,31 +358,6 @@ app.get('/cities/:cityName/hotels/standouts', async (req, res) => {
     const offset = parseNonNegativeInt(req.query.offset, 0);
     const rows = await queryHotelStandoutsRows(cityName, minReviews, limit, offset);
     res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get('/hotels/top-rated', async (req, res) => {
-  try {
-    const city = req.query.city;
-    if (!city) return res.status(400).json({ error: 'Missing required query param: city' });
-
-    const result = await getPool().query(
-      `
-        SELECT
-          o.name AS name,
-          ROUND(AVG(r.overall_rating)::numeric, 2) AS rating
-        FROM offerings o
-        JOIN reviews r ON r.offering_id = o.id
-        WHERE LOWER(o.city) = LOWER($1)
-        GROUP BY o.id, o.name
-        HAVING AVG(r.overall_rating) >= 4.0
-        ORDER BY rating DESC NULLS LAST;
-      `,
-      [String(city)]
-    );
-    res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -574,116 +409,54 @@ app.get('/hotels/overhyped', async (req, res) => {
   }
 });
 
-app.get('/hotels/top-safe-rated', async (req, res) => {
+app.get('/hotels/hidden-gems', async (req, res) => {
   try {
-    const limit = Math.min(parsePositiveInt(req.query.limit, 20), 100);
+    const limit = Math.min(parsePositiveInt(req.query.limit, 50), 200);
+    const offset = parseNonNegativeInt(req.query.offset, 0, 1000000);
+    const minRating = Number(req.query.min_rating);
+    const minReviews = Number(req.query.min_reviews);
+    const maxReviews = Number(req.query.max_reviews);
+
+    const ratingFloor = Number.isFinite(minRating) ? minRating : 4.5;
+    const reviewsMin = Number.isFinite(minReviews) ? minReviews : 5;
+    const reviewsMax = Number.isFinite(maxReviews) ? maxReviews : 30;
+
     const result = await getPool().query(
       `
-        WITH hotel_ratings AS (
+        WITH hotel_stats AS (
           SELECT
-            r.offering_id,
-            AVG(r.overall_rating) AS average_rating
-          FROM reviews r
-          GROUP BY r.offering_id
+            o.id,
+            o.name,
+            o.city,
+            COUNT(r.id)::int AS review_count,
+            AVG(r.overall_rating) AS avg_overall
+          FROM offerings o
+          JOIN reviews r ON r.offering_id = o.id
+          GROUP BY o.id, o.name, o.city
         )
         SELECT
-          o.name AS hotel_name,
-          o.city,
-          o.hotel_class,
-          hr.average_rating AS average_rating,
-          (100 - ci.crime_index) AS safety_index
-        FROM offerings o
-        JOIN hotel_ratings hr ON hr.offering_id = o.id
-        JOIN city_crime_index ci ON LOWER(ci.city) = LOWER(o.city)
-        ORDER BY hr.average_rating DESC NULLS LAST, (100 - ci.crime_index) DESC NULLS LAST
-        LIMIT $1;
+          name AS hotel_name,
+          city,
+          review_count,
+          ROUND(avg_overall::numeric, 2) AS avg_overall
+        FROM hotel_stats
+        WHERE review_count BETWEEN $1::int AND $2::int
+          AND avg_overall >= $3::numeric
+        ORDER BY avg_overall DESC NULLS LAST, review_count ASC, hotel_name ASC
+        LIMIT $4::int
+        OFFSET $5::int;
       `,
-      [limit]
+      [reviewsMin, reviewsMax, ratingFloor, limit, offset]
     );
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
-app.get('/hotels/room-ratings', async (req, res) => {
-  try {
-    const result = await getPool().query(`
-      SELECT
-        o.name AS name,
-        o.city AS city,
-        ROUND(AVG(r.rooms_rating)::numeric, 2) AS rooms_rating
-      FROM offerings o
-      JOIN reviews r ON r.offering_id = o.id
-      WHERE r.rooms_rating IS NOT NULL
-      GROUP BY o.id, o.name, o.city
-      HAVING AVG(r.rooms_rating) > 3.0
-      ORDER BY rooms_rating DESC NULLS LAST
-      LIMIT 200;
-    `);
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get('/hotels/filtered', async (req, res) => {
-  try {
-    const result = await getPool().query(`
-      WITH city_stats AS (
-        SELECT
-          LOWER(city) AS city_key,
-          ROUND(SUM(population))::bigint AS city_population
-        FROM population
-        GROUP BY LOWER(city)
-      ),
-      hotel_room_ratings AS (
-        SELECT
-          offering_id,
-          AVG(rooms_rating) AS average_rooms_rating
-        FROM reviews
-        GROUP BY offering_id
-      )
-      SELECT
-        o.name AS hotel_name,
-        o.city,
-        o.hotel_class,
-        hrr.average_rooms_rating,
-        (100 - ci.crime_index) AS safety_index,
-        cs.city_population
-      FROM offerings o
-      JOIN hotel_room_ratings hrr ON hrr.offering_id = o.id
-      JOIN city_stats cs ON LOWER(o.city) = cs.city_key
-      JOIN city_crime_index ci ON LOWER(ci.city) = cs.city_key
-      WHERE cs.city_population >= 100000 AND (100 - ci.crime_index) > 50
-      ORDER BY hrr.average_rooms_rating DESC NULLS LAST, (100 - ci.crime_index) DESC NULLS LAST, cs.city_population DESC
-      LIMIT 200;
-    `);
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get('/hotels/standouts', async (req, res) => {
-  try {
-    const city = (req.query.city ?? '').toString().trim();
-    if (!city) {
-      return res.status(400).json({ error: 'Missing required query param: city' });
-    }
-    const minReviews = Math.min(Math.max(parsePositiveInt(req.query.min_reviews, 20), 1), 500);
-    const limit = Math.min(parsePositiveInt(req.query.limit, 50), 100);
-    const offset = parseNonNegativeInt(req.query.offset, 0);
-    const rows = await queryHotelStandoutsRows(city, minReviews, limit, offset);
-    res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 app.get('/hotels/top-overall', async (req, res) => {
   try {
     const limit = Math.min(parsePositiveInt(req.query.limit, 20), 100);
+    const offset = parseNonNegativeInt(req.query.offset, 0, 1000000);
     const result = await getPool().query(
       `
         WITH city_stats AS (
@@ -712,9 +485,10 @@ app.get('/hotels/top-overall', async (req, res) => {
         JOIN city_stats cs ON LOWER(o.city) = cs.city_key
         JOIN city_crime_index ci ON LOWER(ci.city) = cs.city_key
         ORDER BY hr.average_rating DESC NULLS LAST
-        LIMIT $1;
+        LIMIT $1
+        OFFSET $2;
       `,
-      [limit]
+      [limit, offset]
     );
     res.json(result.rows);
   } catch (err) {

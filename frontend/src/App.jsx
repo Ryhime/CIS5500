@@ -4,6 +4,8 @@ import Home from "./pages/Home";
 import CityOverview from "./pages/CityOverview";
 import CityDiscovery from "./pages/CityDiscovery";
 import Hotels from "./pages/Hotels";
+import OverhypedHotels from "./pages/OverhypedHotels";
+import HiddenGemsHotels from "./pages/HiddenGemsHotels";
 import Reviews from "./pages/Reviews";
 import LegacyCityRedirect from "./pages/LegacyCityRedirect";
 
@@ -18,6 +20,8 @@ function Layout() {
           <Route path="/cities" element={<CityOverview />} />
           <Route path="/map" element={<LegacyCityRedirect />} />
           <Route path="/hotels" element={<Hotels />} />
+          <Route path="/hotels/overhyped" element={<OverhypedHotels />} />
+          <Route path="/hotels/hidden-gems" element={<HiddenGemsHotels />} />
           <Route path="/safety" element={<LegacyCityRedirect />} />
           <Route path="/reviews" element={<Reviews />} />
         </Routes>

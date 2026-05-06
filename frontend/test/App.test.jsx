@@ -41,6 +41,12 @@ describe("App routing smoke tests", () => {
     expect(screen.getByRole("heading", { name: "Hotels" })).toBeInTheDocument();
   });
 
+  test("renders overhyped hotels route", async () => {
+    window.history.pushState({}, "", "/hotels/overhyped");
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: /Overhyped hotels/i })).toBeInTheDocument();
+  });
+
   test("renders safety route", () => {
     window.history.pushState({}, "", "/safety");
     render(<App />);

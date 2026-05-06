@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import HotelList from "../components/HotelList";
 import PageNavLinks from "../components/PageNavLinks";
 
@@ -8,6 +8,8 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
 /** Per-dimension sorts removed from UI — aggregates are often null/tied; overall + count stay predictable. */
 const HOTEL_SORT_OPTIONS = new Set(["overall_desc", "reviews_desc", "name_asc"]);
+
+const TOP_OVERALL_PAGE_SIZE = 5;
 
 export default function Hotels() {
   const [params, setParams] = useSearchParams();
@@ -60,6 +62,13 @@ export default function Hotels() {
   const [error, setError] = useState(null);
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [totalCount, setTotalCount] = useState(null);
+
+  // Shortcut query: top rated hotels (overall) with safety + city population
+  const [topOverallRows, setTopOverallRows] = useState([]);
+  const [topOverallLoading, setTopOverallLoading] = useState(false);
+  const [topOverallError, setTopOverallError] = useState(null);
+  const [topOverallPage, setTopOverallPage] = useState(1);
+  const [topOverallHasMore, setTopOverallHasMore] = useState(false);
 
   const primaryCityForNav =
     mode === "single_city"
@@ -169,6 +178,42 @@ export default function Hotels() {
     qs.set("hotel", hotel.name);
     navigate(`/reviews?${qs.toString()}`);
   }
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setTopOverallLoading(true);
+      setTopOverallError(null);
+      try {
+        const offset = (Math.max(1, topOverallPage) - 1) * TOP_OVERALL_PAGE_SIZE;
+        const qs = new URLSearchParams({
+          limit: String(TOP_OVERALL_PAGE_SIZE + 1),
+          offset: String(offset),
+        }).toString();
+        const res = await fetch(`${API_BASE}/hotels/top-overall?${qs}`);
+        if (!res.ok) throw new Error(`Request failed (${res.status})`);
+        const payload = await res.json();
+        const list = Array.isArray(payload) ? payload : [];
+        const hasMore = list.length > TOP_OVERALL_PAGE_SIZE;
+        const pageRows = list.slice(0, TOP_OVERALL_PAGE_SIZE);
+        if (!cancelled) {
+          setTopOverallRows(pageRows);
+          setTopOverallHasMore(hasMore);
+        }
+      } catch {
+        if (!cancelled) {
+          setTopOverallRows([]);
+          setTopOverallError("Could not load top rated hotels from the API.");
+          setTopOverallHasMore(false);
+        }
+      } finally {
+        if (!cancelled) setTopOverallLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [topOverallPage]);
 
   const hotelsForList = useMemo(() => {
     const showCity = mode !== "single_city";
@@ -305,6 +350,104 @@ export default function Hotels() {
           <p className="info-card-muted" style={{ marginTop: "0.35rem" }}>
             Describe what you want, then run the search. Nothing loads until you submit.
           </p>
+          <div className="overhyped-callout" role="note">
+            <p className="overhyped-callout-text">Explore</p>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <Link className="pill-link" to="/hotels/hidden-gems">
+                Hidden gems
+              </Link>
+              <Link className="pill-link" to="/hotels/overhyped">
+                Overhyped hotels
+              </Link>
+            </div>
+          </div>
+
+          <section className="card" style={{ marginTop: "0.9rem" }} aria-label="Top rated hotels">
+            <div className="card-body" style={{ paddingTop: "0.75rem" }}>
+              <h3 style={{ margin: 0 }}>Top rated hotels</h3>
+              <p className="info-card-muted" style={{ marginTop: "0.35rem" }}>
+                Ranked by average overall rating, with safety index and city population.
+              </p>
+              {topOverallLoading && (
+                <p className="status-line" role="status" style={{ marginTop: "0.6rem" }}>
+                  Loading top rated hotels…
+                </p>
+              )}
+              {!topOverallLoading && topOverallError && (
+                <p className="status-line status-error" role="status" style={{ marginTop: "0.6rem" }}>
+                  {topOverallError}
+                </p>
+              )}
+              {!topOverallLoading && !topOverallError && topOverallRows.length === 0 && (
+                <p className="status-line" style={{ marginTop: "0.6rem" }}>
+                  No hotels returned.
+                </p>
+              )}
+              {!topOverallLoading && !topOverallError && topOverallRows.length > 0 && (
+                <>
+                  <div
+                    className="standouts-pager"
+                    style={{ marginTop: "0.6rem" }}
+                    aria-label="Top rated hotels pagination"
+                  >
+                    <button
+                      type="button"
+                      className="standouts-pager-btn"
+                      disabled={topOverallPage <= 1 || topOverallLoading}
+                      onClick={() => setTopOverallPage((p) => Math.max(1, p - 1))}
+                    >
+                      Prev
+                    </button>
+                    <span className="standouts-pager-meta">
+                      Page {topOverallPage}
+                      {topOverallHasMore ? " · more below" : ""}
+                    </span>
+                    <button
+                      type="button"
+                      className="standouts-pager-btn"
+                      disabled={!topOverallHasMore || topOverallLoading}
+                      onClick={() => setTopOverallPage((p) => p + 1)}
+                    >
+                      Next
+                    </button>
+                  </div>
+                  <div style={{ overflowX: "auto", marginTop: "0.6rem" }}>
+                    <table className="standouts-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">Hotel</th>
+                          <th scope="col">City</th>
+                          <th scope="col">Avg rating</th>
+                          <th scope="col">Safety</th>
+                          <th scope="col">Population</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {topOverallRows.map((r, idx) => (
+                          <tr key={`${r?.hotel_name ?? "hotel"}-${r?.city ?? ""}-${idx}`}>
+                            <td>
+                              <button
+                                type="button"
+                                className="link-button standouts-name-btn"
+                                onClick={() => handleHotelClick({ name: r?.hotel_name, city: r?.city })}
+                              >
+                                {r?.hotel_name ?? "—"}
+                              </button>
+                            </td>
+                            <td>{r?.city ?? "—"}</td>
+                            <td>{r?.average_rating != null ? Number(r.average_rating).toFixed(2) : "—"}</td>
+                            <td>{r?.safety_index != null ? Number(r.safety_index).toFixed(0) : "—"}</td>
+                            <td>{r?.city_population != null ? Number(r.city_population).toLocaleString() : "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
+
           <form onSubmit={runSearch}>
             <div
               style={{

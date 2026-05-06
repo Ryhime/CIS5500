@@ -331,6 +331,37 @@ code {
   color: var(--text-muted);
 }
 
+.overhyped-callout {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-top: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--amber) 38%, var(--border));
+  background: color-mix(in srgb, var(--amber) 9%, var(--bg-elevated));
+  box-shadow: var(--shadow-sm);
+}
+
+.overhyped-callout-text {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 600;
+  color: var(--text-h);
+  font-family: var(--serif-display);
+  letter-spacing: -0.01em;
+}
+
+a.overhyped-callout-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
 .info-row {
   margin: 0.5rem 0 0;
   font-size: 0.98rem;
