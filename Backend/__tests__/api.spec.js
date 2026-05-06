@@ -100,20 +100,113 @@ describeIf('Backend API (integration)', () => {
     }
   });
 
-  test('GET /hotels/top-rated validates required city', async () => {
-    const res = await apiGet(app, '/hotels/top-rated');
+  describe.skip('Legacy hotel endpoints (disabled in index.js — see commented block)', () => {
+    test('GET /hotels/top-rated validates required city', async () => {
+      const res = await apiGet(app, '/hotels/top-rated');
+      expect(res.status).toBe(400);
+      expect(res.body).toHaveProperty('error');
+    });
+
+    test('GET /hotels/top-rated returns array for configured city', async () => {
+      const res = await apiGet(app, '/hotels/top-rated', { city: TEST_CITY });
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      if (res.body.length > 0) {
+        expect(res.body[0]).toHaveProperty('name');
+        expect(res.body[0]).toHaveProperty('rating');
+      }
+    });
+
+    test('GET /hotel/url validates required name', async () => {
+      const res = await apiGet(app, '/hotel/url');
+      expect(res.status).toBe(400);
+      expect(res.body).toHaveProperty('error');
+    });
+
+    test('GET /hotel/url returns 404 for unknown hotel', async () => {
+      const res = await apiGet(app, '/hotel/url', { name: 'Definitely Not A Real Hotel 1234' });
+      expect(res.status).toBe(404);
+      expect(res.body).toHaveProperty('error');
+    });
+
+    test('GET /hotels/standouts validates required city param', async () => {
+    const res = await apiGet(app, '/hotels/standouts');
     expect(res.status).toBe(400);
     expect(res.body).toHaveProperty('error');
   });
 
-  test('GET /hotels/top-rated returns array for configured city', async () => {
-    const res = await apiGet(app, '/hotels/top-rated', { city: TEST_CITY });
+  test('GET /hotels/standouts returns array for configured city', async () => {
+    const res = await apiGet(app, '/hotels/standouts', {
+      city: TEST_CITY,
+      limit: TEST_LIMIT,
+      min_reviews: 20,
+    });
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
     if (res.body.length > 0) {
-      expect(res.body[0]).toHaveProperty('name');
-      expect(res.body[0]).toHaveProperty('rating');
+      expect(res.body[0]).toHaveProperty('hotel_name');
+      expect(res.body[0]).toHaveProperty('margin_above_city');
     }
+  });
+
+  test('GET /cities/:city/hotels/standouts returns array', async () => {
+    const res = await apiGet(
+      app,
+      `/cities/${encodeURIComponent(TEST_CITY)}/hotels/standouts`,
+      { limit: TEST_LIMIT, min_reviews: 20 }
+    );
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  test('GET /hotels/overhyped returns array', async () => {
+      const res = await apiGet(app, '/hotels/overhyped');
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      if (res.body.length > 0) {
+        expect(res.body[0]).toHaveProperty('name');
+        expect(res.body[0]).toHaveProperty('city');
+        expect(res.body[0]).toHaveProperty('review_count');
+        expect(res.body[0]).toHaveProperty('avg_rating');
+      }
+    });
+
+    test('GET /hotels/top-safe-rated returns array', async () => {
+      const res = await apiGet(app, '/hotels/top-safe-rated', { limit: Math.max(TEST_LIMIT, 5) });
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      if (res.body.length > 0) {
+        expect(res.body[0]).toHaveProperty('hotel_name');
+        expect(res.body[0]).toHaveProperty('city');
+        expect(res.body[0]).toHaveProperty('average_rating');
+        expect(res.body[0]).toHaveProperty('safety_index');
+      }
+    });
+
+    test('GET /hotels/room-ratings returns array', async () => {
+      const res = await apiGet(app, '/hotels/room-ratings');
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+    });
+
+    test('GET /hotels/filtered returns array', async () => {
+      const res = await apiGet(app, '/hotels/filtered');
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+    });
+
+    test('GET /hotels/top-overall returns array', async () => {
+      const res = await apiGet(app, '/hotels/top-overall', { limit: Math.max(TEST_LIMIT, 5) });
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      if (res.body.length > 0) {
+        expect(res.body[0]).toHaveProperty('hotel_name');
+        expect(res.body[0]).toHaveProperty('city');
+        expect(res.body[0]).toHaveProperty('average_rating');
+        expect(res.body[0]).toHaveProperty('safety_index');
+        expect(res.body[0]).toHaveProperty('city_population');
+      }
+    });
   });
 
   test('GET /cities/:cityName/hotels/average_ratings returns per-hotel average ratings', async () => {
@@ -127,67 +220,6 @@ describeIf('Backend API (integration)', () => {
       expect(res.body[0]).toHaveProperty('name');
       expect(res.body[0]).toHaveProperty('url');
       expect(res.body[0]).toHaveProperty('average_rating');
-    }
-  });
-
-  test('GET /hotel/url validates required name', async () => {
-    const res = await apiGet(app, '/hotel/url');
-    expect(res.status).toBe(400);
-    expect(res.body).toHaveProperty('error');
-  });
-
-  test('GET /hotel/url returns 404 for unknown hotel', async () => {
-    const res = await apiGet(app, '/hotel/url', { name: 'Definitely Not A Real Hotel 1234' });
-    expect(res.status).toBe(404);
-    expect(res.body).toHaveProperty('error');
-  });
-
-  test('GET /hotels/overhyped returns array', async () => {
-    const res = await apiGet(app, '/hotels/overhyped');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    if (res.body.length > 0) {
-      expect(res.body[0]).toHaveProperty('name');
-      expect(res.body[0]).toHaveProperty('city');
-      expect(res.body[0]).toHaveProperty('review_count');
-      expect(res.body[0]).toHaveProperty('avg_rating');
-    }
-  });
-
-  test('GET /hotels/top-safe-rated returns array', async () => {
-    const res = await apiGet(app, '/hotels/top-safe-rated', { limit: Math.max(TEST_LIMIT, 5) });
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    if (res.body.length > 0) {
-      expect(res.body[0]).toHaveProperty('hotel_name');
-      expect(res.body[0]).toHaveProperty('city');
-      expect(res.body[0]).toHaveProperty('average_rating');
-      expect(res.body[0]).toHaveProperty('safety_index');
-    }
-  });
-
-  test('GET /hotels/room-ratings returns array', async () => {
-    const res = await apiGet(app, '/hotels/room-ratings');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  test('GET /hotels/filtered returns array', async () => {
-    const res = await apiGet(app, '/hotels/filtered');
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-  });
-
-  test('GET /hotels/top-overall returns array', async () => {
-    const res = await apiGet(app, '/hotels/top-overall', { limit: Math.max(TEST_LIMIT, 5) });
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    if (res.body.length > 0) {
-      expect(res.body[0]).toHaveProperty('hotel_name');
-      expect(res.body[0]).toHaveProperty('city');
-      expect(res.body[0]).toHaveProperty('average_rating');
-      expect(res.body[0]).toHaveProperty('safety_index');
-      expect(res.body[0]).toHaveProperty('city_population');
     }
   });
 });

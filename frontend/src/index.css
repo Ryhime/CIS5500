@@ -661,6 +661,86 @@ code {
   color: var(--text);
 }
 
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.link-button:hover {
+  color: var(--accent-hover);
+}
+
+.standouts-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.standouts-table th,
+.standouts-table td {
+  padding: 0.45rem 0.65rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.standouts-table th {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.standouts-margin {
+  color: var(--teal);
+  font-weight: 600;
+}
+
+.standouts-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.standouts-pager-meta {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  flex: 1;
+  min-width: 8rem;
+}
+
+.standouts-pager-btn {
+  font: inherit;
+  font-size: 0.88rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.standouts-pager-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.standouts-pager-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* ----- Leaflet ----- */
 .leaflet-wrap {
   width: 100%;

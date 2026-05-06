@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import CityCard from "../components/CityCard";
 import CityLeafletMap from "../components/CityLeafletMap";
 import PageNavLinks from "../components/PageNavLinks";
@@ -7,8 +7,11 @@ import PageNavLinks from "../components/PageNavLinks";
 /** Empty string = same origin in dev (Vite proxies API routes). */
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
+const STANDOUTS_PAGE_SIZE = 5;
+
 export default function CityOverview() {
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const cityName = params.get("city")?.trim() ?? "";
 
   const [city, setCity] = useState(null);
@@ -19,7 +22,12 @@ export default function CityOverview() {
   const [weatherError, setWeatherError] = useState(null);
 
   const [mapHotels, setMapHotels] = useState([]);
-  const [mapHotelsLoading, setMapHotelsLoading] = useState(false);
+
+  const [standouts, setStandouts] = useState([]);
+  const [standoutsLoading, setStandoutsLoading] = useState(false);
+  const [standoutsError, setStandoutsError] = useState(null);
+  const [standoutsPage, setStandoutsPage] = useState(1);
+  const [standoutsHasMore, setStandoutsHasMore] = useState(false);
 
   useEffect(() => {
     if (!cityName) return;
@@ -76,7 +84,6 @@ export default function CityOverview() {
     let cancelled = false;
     const hotelsUrl = `${API_BASE}/cities/${encodeURIComponent(cityName)}/hotels?geocode=1`;
     (async () => {
-      setMapHotelsLoading(true);
       try {
         const res = await fetch(hotelsUrl);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -85,14 +92,79 @@ export default function CityOverview() {
         setMapHotels(Array.isArray(rows) ? rows : []);
       } catch {
         if (!cancelled) setMapHotels([]);
-      } finally {
-        if (!cancelled) setMapHotelsLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
   }, [cityName]);
+
+  useEffect(() => {
+    setStandoutsPage(1);
+  }, [cityName]);
+
+  useEffect(() => {
+    if (!cityName) {
+      setStandouts([]);
+      setStandoutsError(null);
+      setStandoutsHasMore(false);
+      return;
+    }
+    let cancelled = false;
+    const offset = (Math.max(1, standoutsPage) - 1) * STANDOUTS_PAGE_SIZE;
+    const qs = new URLSearchParams({
+      limit: String(STANDOUTS_PAGE_SIZE + 1),
+      offset: String(offset),
+      min_reviews: "20",
+    }).toString();
+    const url = `${API_BASE}/cities/${encodeURIComponent(cityName)}/hotels/standouts?${qs}`;
+    (async () => {
+      setStandoutsLoading(true);
+      setStandoutsError(null);
+      setStandouts([]);
+      setStandoutsHasMore(false);
+      try {
+        const res = await fetch(url);
+        if (!res.ok) {
+          let detail = `HTTP ${res.status}`;
+          try {
+            const body = await res.json();
+            if (body?.error) detail += `: ${body.error}`;
+          } catch {
+            /* ignore */
+          }
+          throw new Error(detail);
+        }
+        const rows = await res.json();
+        const list = Array.isArray(rows) ? rows : [];
+        const hasMore = list.length > STANDOUTS_PAGE_SIZE;
+        const pageRows = list.slice(0, STANDOUTS_PAGE_SIZE);
+        if (!cancelled) {
+          setStandouts(pageRows);
+          setStandoutsHasMore(hasMore);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          const hint = e instanceof Error ? e.message : "Request failed";
+          setStandoutsError(hint);
+          setStandouts([]);
+          setStandoutsHasMore(false);
+        }
+      } finally {
+        if (!cancelled) setStandoutsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cityName, standoutsPage]);
+
+  function goToReviews(hotelName) {
+    const qs = new URLSearchParams();
+    qs.set("city", cityName);
+    qs.set("hotel", hotelName);
+    navigate(`/reviews?${qs.toString()}`);
+  }
 
   useEffect(() => {
     if (!city?.latitude || !city?.longitude) return;
@@ -157,26 +229,6 @@ export default function CityOverview() {
     [mapHotels]
   );
 
-  const mapCaption = useMemo(() => {
-    const n = mapHotels.length;
-    const geocoded = mapHotels.filter((h) => h.map_location_approximate === false).length;
-    const approx = mapHotels.filter((h) => h.map_location_approximate === true).length;
-    const parts = [
-      `Orange dot: city center · Blue pins: ${n} hotel${n === 1 ? "" : "s"}.`,
-    ];
-    if (geocoded > 0) {
-      parts.push(
-        ` ${geocoded} pin${geocoded === 1 ? "" : "s"} placed from street address (OpenStreetMap Nominatim).`
-      );
-    }
-    if (approx > 0) {
-      parts.push(
-        ` ${approx} fallback pin${approx === 1 ? "" : "s"} near the city center when geocoding did not return a match.`
-      );
-    }
-    return parts.join("");
-  }, [mapHotels]);
-
   return (
     <main className="page">
       <header className="page-head">
@@ -214,23 +266,110 @@ export default function CityOverview() {
             <CityCard city={city} />
           </article>
 
+          <section
+            className="card"
+            style={{ marginTop: "1.25rem" }}
+            aria-label="Standouts"
+          >
+            <div className="card-body">
+              <h2 className="weather-title" style={{ marginTop: 0 }}>
+                Standouts
+              </h2>
+              <p className="info-card-muted" style={{ marginBottom: "0.85rem" }}>
+                Hotels that beat the city&rsquo;s average.
+              </p>
+              {standoutsLoading && (
+                <p className="status-line" role="status">
+                  Loading standouts…
+                </p>
+              )}
+              {!standoutsLoading && standoutsError && (
+                <p className="status-line status-error" role="status">
+                  Could not load standouts ({standoutsError}).
+                </p>
+              )}
+              {!standoutsLoading && !standoutsError && standouts.length === 0 && (
+                <p className="status-line">
+                  No hotels in this city beat the city-wide baseline with enough reviews.
+                </p>
+              )}
+              {!standoutsLoading && !standoutsError && standouts.length > 0 && (
+                <div style={{ overflowX: "auto" }}>
+                  <div className="standouts-pager">
+                    <button
+                      type="button"
+                      className="standouts-pager-btn"
+                      disabled={standoutsPage <= 1 || standoutsLoading}
+                      onClick={() => setStandoutsPage((p) => Math.max(1, p - 1))}
+                    >
+                      Previous
+                    </button>
+                    <span className="standouts-pager-meta">
+                      Page {standoutsPage}
+                      {standoutsHasMore ? " · more below" : ""}
+                    </span>
+                    <button
+                      type="button"
+                      className="standouts-pager-btn"
+                      disabled={!standoutsHasMore || standoutsLoading}
+                      onClick={() => setStandoutsPage((p) => p + 1)}
+                    >
+                      Next
+                    </button>
+                  </div>
+                  <table className="standouts-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Hotel</th>
+                        <th scope="col">Avg rating</th>
+                        <th scope="col">Reviews</th>
+                        <th scope="col">City baseline</th>
+                        <th scope="col">Above baseline</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {standouts.map((row, idx) => (
+                        <tr key={`${row.hotel_name}-${idx}`}>
+                          <td>
+                            <button
+                              type="button"
+                              className="link-button standouts-name-btn"
+                              onClick={() => goToReviews(row.hotel_name)}
+                            >
+                              {row.hotel_name}
+                            </button>
+                          </td>
+                          <td>{row.hotel_avg_overall != null ? Number(row.hotel_avg_overall).toFixed(2) : "—"}</td>
+                          <td>{row.review_count != null ? Number(row.review_count).toLocaleString() : "—"}</td>
+                          <td>
+                            {row.city_baseline_avg != null ? Number(row.city_baseline_avg).toFixed(3) : "—"}
+                          </td>
+                          <td className="standouts-margin">
+                            {row.margin_above_city != null
+                              ? `+${Number(row.margin_above_city).toFixed(3)}`
+                              : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </section>
+
           {hasCoords && (
             <section className="map-section overview-map" aria-label="City map" style={{ marginTop: "1.25rem" }}>
               <h2 className="weather-title" style={{ marginBottom: "0.65rem" }}>
                 Map
               </h2>
-              {mapHotelsLoading && (
-                <p className="status-line" role="status">
-                  Loading hotel pins (geocoding uses ~1 second per unique address the first time)…
-                </p>
-              )}
               <CityLeafletMap
                 lat={Number(city.latitude)}
                 lng={Number(city.longitude)}
                 label={city?.city ? `${city.city}` : cityName}
                 hotelMarkers={hotelMarkersForMap}
+                onHotelPinClick={(h) => goToReviews(h.name)}
               />
-              <p className="map-meta">{mapCaption}</p>
               <p className="map-meta" style={{ marginTop: "0.25rem" }}>
                 {Number(city.latitude).toFixed(4)}°, {Number(city.longitude).toFixed(4)}°
               </p>

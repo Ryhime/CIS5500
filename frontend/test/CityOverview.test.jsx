@@ -22,6 +22,21 @@ describe("CityOverview page", () => {
       "fetch",
       vi.fn((input) => {
         const url = String(input);
+        if (url.includes("/hotels/standouts")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => [
+              {
+                hotel_name: "Standout Inn",
+                city: "Boston",
+                hotel_avg_overall: 4.5,
+                review_count: 100,
+                city_baseline_avg: 4.0,
+                margin_above_city: 0.5,
+              },
+            ],
+          });
+        }
         if (url.includes("/cities/Boston/hotels")) {
           return Promise.resolve({
             ok: true,
@@ -74,7 +89,9 @@ describe("CityOverview page", () => {
     expect(await screen.findByText("Boston")).toBeInTheDocument();
     expect(await screen.findByText("5-day weather")).toBeInTheDocument();
     expect(await screen.findByText(/High 70.*54/)).toBeInTheDocument();
-    expect(await screen.findByText(/Blue pins:/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Map" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Standouts" })).toBeInTheDocument();
+    expect(await screen.findByText("Standout Inn")).toBeInTheDocument();
   });
 
   test("shows guidance when city is not provided", () => {

@@ -15,6 +15,13 @@ function parsePositiveInt(value, fallback) {
   return Math.floor(n);
 }
 
+function parseNonNegativeInt(value, fallback, cap = 100000) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return fallback;
+  return Math.min(Math.floor(n), cap);
+}
+
 const GEOCODE_USER_AGENT = 'CIS5500-TravelApp/1.0 (educational project)';
 
 /** address+city -> { lat, lng } | null (null means "tried and failed", do not re-query) */
@@ -151,6 +158,52 @@ function getPool() {
     console.error('Unexpected PG pool error', err);
   });
   return pool;
+}
+
+/** Nested aggregation: hotels in one city beating mean of hotel averages (≥ minReviews reviews each). */
+const HOTEL_STANDOUTS_SQL = `
+        WITH hotel_ratings AS (
+          SELECT
+            o.id,
+            o.name,
+            o.city,
+            ROUND(AVG(r.overall_rating)::numeric, 3) AS hotel_avg_overall,
+            COUNT(r.id)::int AS review_count
+          FROM offerings o
+          JOIN reviews r ON r.offering_id = o.id
+          WHERE LOWER(TRIM(o.city)) = LOWER(TRIM($1))
+          GROUP BY o.id, o.name, o.city
+          HAVING COUNT(r.id) >= $2::int
+        ),
+        city_hotel_mean AS (
+          SELECT
+            city,
+            AVG(hotel_avg_overall) AS mean_of_hotel_avgs
+          FROM hotel_ratings
+          GROUP BY city
+        )
+        SELECT
+          hr.name AS hotel_name,
+          hr.city,
+          hr.hotel_avg_overall,
+          hr.review_count,
+          ROUND(chm.mean_of_hotel_avgs::numeric, 3) AS city_baseline_avg,
+          ROUND((hr.hotel_avg_overall - chm.mean_of_hotel_avgs)::numeric, 3) AS margin_above_city
+        FROM hotel_ratings hr
+        JOIN city_hotel_mean chm ON LOWER(TRIM(hr.city)) = LOWER(TRIM(chm.city))
+        WHERE hr.hotel_avg_overall > chm.mean_of_hotel_avgs
+        ORDER BY margin_above_city DESC NULLS LAST, hr.review_count DESC
+        LIMIT $3::int OFFSET $4::int;
+`;
+
+async function queryHotelStandoutsRows(city, minReviews, limit, offset = 0) {
+  const result = await getPool().query(HOTEL_STANDOUTS_SQL, [
+    city,
+    minReviews,
+    limit,
+    offset,
+  ]);
+  return result.rows;
 }
 
 app.locals.getPool = getPool;
@@ -437,6 +490,19 @@ app.get('/cities/:cityName/hotels/average_ratings', async (req, res) => {
   }
 });
 
+app.get('/cities/:cityName/hotels/standouts', async (req, res) => {
+  try {
+    const cityName = decodeURIComponent(req.params.cityName);
+    const minReviews = Math.min(Math.max(parsePositiveInt(req.query.min_reviews, 20), 1), 500);
+    const limit = Math.min(parsePositiveInt(req.query.limit, 50), 100);
+    const offset = parseNonNegativeInt(req.query.offset, 0);
+    const rows = await queryHotelStandoutsRows(cityName, minReviews, limit, offset);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/hotels/top-rated', async (req, res) => {
   try {
     const city = req.query.city;
@@ -594,6 +660,22 @@ app.get('/hotels/filtered', async (req, res) => {
       LIMIT 200;
     `);
     res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/hotels/standouts', async (req, res) => {
+  try {
+    const city = (req.query.city ?? '').toString().trim();
+    if (!city) {
+      return res.status(400).json({ error: 'Missing required query param: city' });
+    }
+    const minReviews = Math.min(Math.max(parsePositiveInt(req.query.min_reviews, 20), 1), 500);
+    const limit = Math.min(parsePositiveInt(req.query.limit, 50), 100);
+    const offset = parseNonNegativeInt(req.query.offset, 0);
+    const rows = await queryHotelStandoutsRows(city, minReviews, limit, offset);
+    res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -57,8 +57,9 @@ function FitBounds({ points }) {
  * @param {number} lng - city center longitude
  * @param {string} label - city name (center marker)
  * @param {Array<{ map_latitude: number, map_longitude: number, name: string, street_address?: string, map_location_approximate?: boolean }>} hotelMarkers
+ * @param {(hotel: { name: string }) => void} [onHotelPinClick] — e.g. navigate to reviews
  */
-export default function CityLeafletMap({ lat, lng, label, hotelMarkers = [] }) {
+export default function CityLeafletMap({ lat, lng, label, hotelMarkers = [], onHotelPinClick }) {
   const dark = usePrefersDark();
   const center = useMemo(() => [Number(lat), Number(lng)], [lat, lng]);
 
@@ -110,19 +111,30 @@ export default function CityLeafletMap({ lat, lng, label, hotelMarkers = [] }) {
           const lo = Number(h.map_longitude);
           if (!Number.isFinite(la) || !Number.isFinite(lo)) return null;
           return (
-            <Marker key={h.id ?? `${h.name}-${la}-${lo}`} position={[la, lo]}>
+            <Marker
+              key={h.id ?? `${h.name}-${la}-${lo}`}
+              position={[la, lo]}
+              eventHandlers={{
+                click: () => {
+                  if (typeof onHotelPinClick === "function" && h?.name) onHotelPinClick(h);
+                },
+              }}
+            >
               <Popup>
                 <strong>{h.name}</strong>
                 {h.street_address ? (
                   <div style={{ fontSize: "0.85rem", marginTop: "0.35rem" }}>{h.street_address}</div>
                 ) : null}
-                {h.map_location_approximate === true ? (
-                  <div style={{ fontSize: "0.78rem", marginTop: "0.35rem", opacity: 0.85 }}>
-                    Approximate pin near city center (address could not be geocoded).
-                  </div>
-                ) : h.map_location_approximate === false ? (
-                  <div style={{ fontSize: "0.78rem", marginTop: "0.35rem", opacity: 0.85 }}>
-                    Placed from street address via OpenStreetMap Nominatim.
+                {typeof onHotelPinClick === "function" && h?.name ? (
+                  <div style={{ marginTop: "0.45rem" }}>
+                    <button
+                      type="button"
+                      className="link-button"
+                      style={{ fontSize: "0.88rem" }}
+                      onClick={() => onHotelPinClick(h)}
+                    >
+                      View reviews
+                    </button>
                   </div>
                 ) : null}
               </Popup>
