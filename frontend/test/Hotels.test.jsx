@@ -35,10 +35,19 @@ describe("Hotels page", () => {
       "fetch",
       vi.fn()
         .mockResolvedValueOnce({
+          // /cities
           ok: true,
           json: async () => [{ city: "Boston" }],
         })
         .mockResolvedValueOnce({
+          // /hotels/top-overall (auto-fetched on mount)
+          ok: true,
+          json: async () => [
+            { hotel_name: "Top Hotel", city: "Boston", average_rating: 4.8, safety_index: 70, city_population: 600000 },
+          ],
+        })
+        .mockResolvedValueOnce({
+          // /hotels/search (after Search click)
           ok: true,
           headers: { get: () => null },
           json: async () => [
