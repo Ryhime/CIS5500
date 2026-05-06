@@ -53,21 +53,13 @@ router.get('/hidden-gems', async (req, res) => {
 
     const result = await getPool().query(
       `
-        WITH hotel_stats AS (
-          SELECT
-            o.id, o.name, o.city,
-            COUNT(r.id)::int AS review_count,
-            AVG(r.overall_rating) AS avg_overall
-          FROM offerings o
-          JOIN reviews r ON r.offering_id = o.id
-          GROUP BY o.id, o.name, o.city
-        )
         SELECT
           name AS hotel_name, city, review_count,
           ROUND(avg_overall::numeric, 2) AS avg_overall
-        FROM hotel_stats
-        WHERE review_count BETWEEN $1::int AND $2::int AND avg_overall >= $3::numeric
-        ORDER BY avg_overall DESC NULLS LAST, review_count ASC, hotel_name ASC
+        FROM mv_hotel_all_stats
+        WHERE review_count BETWEEN $1::int AND $2::int 
+          AND avg_overall >= $3::numeric
+        ORDER BY avg_overall DESC NULLS LAST, review_count ASC, name ASC
         LIMIT $4::int OFFSET $5::int;
       `,
       [reviewsMin, reviewsMax, ratingFloor, limit, offset]
@@ -84,23 +76,16 @@ router.get('/top-overall', async (req, res) => {
     const offset = parseNonNegativeInt(req.query.offset, 0, 1000000);
     const result = await getPool().query(
       `
-        WITH city_stats AS (
-          SELECT LOWER(city) AS city_key, ROUND(SUM(population))::bigint AS city_population
-          FROM population GROUP BY LOWER(city)
-        ),
-        hotel_ratings AS (
-          SELECT offering_id, AVG(overall_rating) AS average_rating
-          FROM reviews GROUP BY offering_id
-        )
         SELECT
-          o.name AS hotel_name, o.city, o.hotel_class,
-          hr.average_rating AS average_rating,
-          (100 - ci.crime_index) AS safety_index,
+          o.name AS hotel_name,
+          o.city,
+          o.hotel_class,
+          hr.average_rating,
+          cs.safety_index,
           cs.city_population
-        FROM offerings o
-        JOIN hotel_ratings hr ON hr.offering_id = o.id
-        JOIN city_stats cs ON LOWER(o.city) = cs.city_key
-        JOIN city_crime_index ci ON LOWER(ci.city) = cs.city_key
+        FROM mv_hotel_avg_rating hr
+        JOIN offerings o ON o.id = hr.offering_id
+        JOIN mv_city_safety cs ON cs.city_key = LOWER(o.city)
         ORDER BY hr.average_rating DESC NULLS LAST
         LIMIT $1 OFFSET $2;
       `,
