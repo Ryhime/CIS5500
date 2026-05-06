@@ -376,6 +376,9 @@ app.get('/cities/:cityName', async (req, res) => {
         FROM population p
         LEFT JOIN city_crime_index ci ON LOWER(p.city) = LOWER(ci.city)
         WHERE LOWER(p.city) = LOWER($1)
+          AND EXISTS (
+            SELECT 1 FROM offerings o WHERE LOWER(o.city) = LOWER(p.city)
+          )
         GROUP BY
           p.city,
           p.latitude,
