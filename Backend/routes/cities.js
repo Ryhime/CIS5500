@@ -96,22 +96,10 @@ async function attachHotelMapPinsGeocoded(rows) {
 }
 
 const HOTEL_STANDOUTS_SQL = `
-  WITH hotel_ratings AS (
-    SELECT
-      o.id,
-      o.name,
-      o.city,
-      ROUND(AVG(r.overall_rating)::numeric, 3) AS hotel_avg_overall,
-      COUNT(r.id)::int AS review_count
-    FROM offerings o
-    JOIN reviews r ON r.offering_id = o.id
-    WHERE LOWER(TRIM(o.city)) = LOWER(TRIM($1))
-    GROUP BY o.id, o.name, o.city
-    HAVING COUNT(r.id) >= $2::int
-  ),
-  city_hotel_mean AS (
+  WITH city_baseline AS (
     SELECT city, AVG(hotel_avg_overall) AS mean_of_hotel_avgs
-    FROM hotel_ratings
+    FROM mv_hotel_rating_stats
+    WHERE city = $1
     GROUP BY city
   )
   SELECT
@@ -119,11 +107,12 @@ const HOTEL_STANDOUTS_SQL = `
     hr.city,
     hr.hotel_avg_overall,
     hr.review_count,
-    ROUND(chm.mean_of_hotel_avgs::numeric, 3) AS city_baseline_avg,
-    ROUND((hr.hotel_avg_overall - chm.mean_of_hotel_avgs)::numeric, 3) AS margin_above_city
-  FROM hotel_ratings hr
-  JOIN city_hotel_mean chm ON LOWER(TRIM(hr.city)) = LOWER(TRIM(chm.city))
-  WHERE hr.hotel_avg_overall > chm.mean_of_hotel_avgs
+    ROUND(cb.mean_of_hotel_avgs::numeric, 3) AS city_baseline_avg,
+    ROUND((hr.hotel_avg_overall - cb.mean_of_hotel_avgs)::numeric, 3) AS margin_above_city
+  FROM mv_hotel_rating_stats hr
+  JOIN city_baseline cb ON hr.city = cb.city
+  WHERE hr.hotel_avg_overall > cb.mean_of_hotel_avgs
+    AND hr.review_count >= $2::int
   ORDER BY margin_above_city DESC NULLS LAST, hr.review_count DESC
   LIMIT $3::int OFFSET $4::int;
 `;
