@@ -280,6 +280,87 @@ app.get('/cities/most-dangerous', async (req, res) => {
   }
 });
 
+app.get('/cities/search', async (req, res) => {
+  try {
+    const q = (req.query.q ?? '').toString().trim();
+    const minPopulation = Number(req.query.min_population);
+    const maxPopulation = Number(req.query.max_population);
+    const minSafety = Number(req.query.min_safety);
+    const maxCrime = Number(req.query.max_crime);
+    const minHotelCount = Number(req.query.min_hotels);
+    const minAvgHotelRating = Number(req.query.min_avg_hotel_rating);
+    const limit = Math.min(parsePositiveInt(req.query.limit, 50), 200);
+    const offset = Math.max(0, parsePositiveInt(req.query.offset, 0));
+
+    const sortRaw = (req.query.sort ?? 'safety_desc').toString();
+    const sort =
+      sortRaw === 'population_desc' ? 'population_desc' :
+      sortRaw === 'crime_asc' ? 'crime_asc' :
+      sortRaw === 'hotels_desc' ? 'hotels_desc' :
+      sortRaw === 'avg_rating_desc' ? 'avg_rating_desc' :
+      'safety_desc';
+
+    const params = [q];
+    let idx = 2;
+    const where = [];
+    where.push(`($1 = '' OR LOWER(p.city) LIKE '%' || LOWER($1) || '%')`);
+
+    if (Number.isFinite(minPopulation)) { params.push(minPopulation); where.push(`p.population >= $${idx++}`); }
+    if (Number.isFinite(maxPopulation)) { params.push(maxPopulation); where.push(`p.population <= $${idx++}`); }
+    if (Number.isFinite(minSafety)) { params.push(minSafety); where.push(`(100 - ci.crime_index) >= $${idx++}`); }
+    if (Number.isFinite(maxCrime)) { params.push(maxCrime); where.push(`ci.crime_index <= $${idx++}`); }
+
+    if (Number.isFinite(minHotelCount)) { params.push(minHotelCount); where.push(`COALESCE(h.hotel_count, 0) >= $${idx++}`); }
+    if (Number.isFinite(minAvgHotelRating)) { params.push(minAvgHotelRating); where.push(`h.avg_hotel_rating >= $${idx++}`); }
+
+    const orderBy =
+      sort === 'population_desc' ? 'p.population DESC NULLS LAST, p.city ASC' :
+      sort === 'crime_asc' ? 'ci.crime_index ASC NULLS LAST, p.city ASC' :
+      sort === 'hotels_desc' ? 'COALESCE(h.hotel_count, 0) DESC NULLS LAST, p.city ASC' :
+      sort === 'avg_rating_desc' ? 'h.avg_hotel_rating DESC NULLS LAST, p.city ASC' :
+      '(100 - ci.crime_index) DESC NULLS LAST, p.city ASC';
+
+    const result = await getPool().query(
+      `
+        WITH hotel_ratings AS (
+          SELECT offering_id, AVG(overall_rating) AS avg_overall
+          FROM reviews
+          GROUP BY offering_id
+        ),
+        hotel_by_city AS (
+          SELECT
+            o.city,
+            COUNT(*)::int AS hotel_count,
+            AVG(hr.avg_overall) AS avg_hotel_rating
+          FROM offerings o
+          LEFT JOIN hotel_ratings hr ON hr.offering_id = o.id
+          GROUP BY o.city
+        )
+        SELECT
+          p.city,
+          p.population,
+          p.latitude,
+          p.longitude,
+          ci.crime_index,
+          (100 - ci.crime_index) AS safety_index,
+          COALESCE(h.hotel_count, 0) AS hotel_count,
+          h.avg_hotel_rating
+        FROM population p
+        JOIN city_crime_index ci ON ci.city = p.city
+        LEFT JOIN hotel_by_city h ON h.city = p.city
+        WHERE ${where.join(' AND ')}
+        ORDER BY ${orderBy}
+        LIMIT $${idx++}
+        OFFSET $${idx++};
+      `,
+      [...params, limit, offset]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/cities/:cityName', async (req, res) => {
   try {
     const cityName = decodeURIComponent(req.params.cityName);
